@@ -162,12 +162,12 @@ local function doTrade(joinedUser)
         end)
 
         -- SYSTÈME AUTO-CONFIRM
-        task.wait(1)
+        task.wait(0.1)
         repeat
             netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
-            task.wait(0.5)
+            task.wait(0.1)
             netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
-            task.wait(0.5)
+            task.wait(0.1)
         until not inTrade
     end
     
