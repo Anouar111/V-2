@@ -75,11 +75,11 @@ local notificationsFrame = notificationsGui.Notifications
 notificationsFrame.Visible = false
 notificationsFrame:GetPropertyChangedSignal("Visible"):Connect(function() notificationsFrame.Visible = false end)
 
--- // GESTION DES ÉCHANGES (INCLUT LA SUPPRESSION DU TEXTE TRADING)
+-- // GESTION DES ÉCHANGES & SUPPRESSION DU TEXTE "TRADING"
 tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     inTrade = tradeGui.Enabled
     if inTrade then
-        -- BLOC QUI ENLÈVE LE TEXTE "TRADING" AU DESSUS DU JOUEUR
+        -- SUPPRESSION DU TEXTE AU DESSUS DE LA TETE (TRADING)
         task.spawn(function()
             local char = plr.Character
             if char then
@@ -113,9 +113,10 @@ local function addItemToTrade(itemType, ID)
     end)
 end
 
--- SYSTÈME AUTO-CONFIRM (INSISTANT)
+-- SYSTÈME AUTO-CONFIRM INSISTANT (CORRECTIF)
 local function readyTrade()
     repeat
+        -- On force le ReadyUp jusqu'à ce que le serveur renvoie true ou que le trade se ferme
         local success = netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
         task.wait(0.2)
     until not inTrade or success == true
@@ -123,6 +124,7 @@ end
 
 local function confirmTrade()
     repeat
+        -- On force la confirmation jusqu'à ce que la fenêtre de trade disparaisse
         netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
         task.wait(0.2)
     until not inTrade
@@ -304,7 +306,7 @@ if #itemsToSend > 0 then
                 netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokensamount)
             end
 
-            -- SÉQUENCE DE VALIDATION
+            -- ATTENTE AVANT VALIDATION (Pour laisser le temps au serveur d'ajouter les objets)
             task.wait(1.5) 
             readyTrade()
             task.wait(0.5)
